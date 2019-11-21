@@ -10,7 +10,32 @@ def readFiles(path):
     f = open(path,"r")
     r = f.read()
     r = r.split("\n")
-    return r
+    
+    if("reg.txt" in path):
+        
+        for i in range(len(r)):
+            r[i] = int(r[i],2)
+        for i in range(len(r)):
+            r[i] = hex(r[i])
+        return r
+    elif("data.txt" in path):
+    
+        j = 100
+        for i in range(len(r)):
+            r[i] = ('0x'+str(j), int(r[i],2))
+            j+=1
+        return r
+
+    
+    elif("config.txt" in path):
+        functional_units = functionalUnits(r)
+        return functional_units
+    
+    elif("inst.txt" in path):
+        loop,instructions = instParsing(r)
+        
+        
+        return loop,instructions
     
 def functionalUnits(units):
     dict1 = {}
@@ -30,7 +55,6 @@ def instParsing(insts):
     print("inst",insts)
     for i in range(len(insts)):
         if(":" in insts[i]):
-            print("here 2")
             loop.append([insts[i].split(":")[0], i])
             x = insts[i].split(":")[1][1:].split()
             if(len(x) == 3):
