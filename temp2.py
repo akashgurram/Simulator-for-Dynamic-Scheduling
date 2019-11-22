@@ -18,22 +18,29 @@ class Instructions:
         self.decode = 0
         self.exec = 0
         self.write = 0
-        self.raw = 0
+        self.raw = "N"
         self.war = 0
         self.waw = 0
         self.struct = "N"
         self.status = 0
         self.intCount = 1
         self.memCount = 2
+        self.functionalUnit = None
+        self.execCycle = 0
         
         if(len(inst) == 3):
             self.op1 = inst[1]
             self.op2 = inst[2]
             
-        elif(len(inst) == 4):
+        if(len(inst) == 4):
             self.op1 = inst[1]
             self.op2 = inst[2]
             self.op3 = inst[3]
+            
+        if(self.iname == "ADD.D" or self.iname == "SUB.D"):
+            self.functionalUnit = "FP adder"
+            self.execCycle = int(functional_units[self.functionalUnit][0])
+                        
             
     
         
@@ -41,7 +48,7 @@ class Pipeline:
      def __init__(self, instructions):
          
          
-         
+         fpRegistersList = []
          instObjs = []
          for i in instructions:
              print(i)
@@ -50,8 +57,7 @@ class Pipeline:
              
          #Iterating Over the instruction objects
          processor = Processor()
-         print(processor.dBusy)
-         x = 10
+         x = 30
          cycle = 0
          while(x>0):
              cycle +=1
@@ -61,25 +67,27 @@ class Pipeline:
                          if(processor.fBusy == "No"):
             
                              processor.fBusy = "Yes"
+                             fpRegistersList.append(inst.op1)                            
                              inst.fetch = cycle
                              inst.status = 1
                                  
                                  
                                  
                      elif(inst.status == 1):
-                         if(processor.dBusy == "No"):                             
-                             processor.dBusy = "Yes"
-                             processor.fBusy = "No"
-                             inst.decode = cycle
-                             inst.status = 2
+                         if(processor.dBusy == "No" ):
+                             if(not(inst.op2 in fpRegistersList) and not(inst.op3 in fpRegistersList)):                                                                 
+                                 processor.dBusy = "Yes"
+                                 processor.fBusy = "No"
+                                 inst.decode = cycle
+                                 inst.status = 2
+                             else:
+                                 inst.raw = "Y"
                              
-                     elif(inst.status == 2):
-                         print(inst.iname)
+                     elif(inst.status == 2):                        
                          if(inst.iname == "L.D"):
                              
                                                               
                              if(processor.intBusy == "No" and inst.intCount == 1):
-                                 print(cycle,instObjs.index(inst))
                                  processor.intBusy = "Yes" 
                                  inst.intCount -=1
                                  processor.dBusy = "No"
@@ -97,12 +105,55 @@ class Pipeline:
                                      inst.exec = cycle
 
                                      inst.status = 3
-#                                     processor.memCount = 2
+                         
+                        
+                        ## YET TO ADD THE HAZARDS BOTH STRUCT AND RAW and make the pipelined auto instead of manual
+                         elif(inst.iname == "ADD.D" or inst.iname == "SUB.D"):
+                            pipelined = functional_units[inst.functionalUnit][1]
+                            
+                            if(pipelined == "yes"):
+                                if(processor.addBusy == "No"):                                    
+                                    processor.dBusy = "No"
+                                    processor.addBusy = "Yes"
+                                inst.execCycle -= 1
+                                if(inst.execCycle == 0):
+                                    inst.exec = cycle
+                                    inst.status = 3
+                            
+                            else:        
+                                if(processor.addBusy == "No"):                                    
+                                    processor.dBusy = "No"
+                                    processor.addBusy = "Yes"
+                                    print("This is",inst.execCycle)
+                                    inst.execCycle -= 1
+                                    if(inst.execCycle == 0):
+                                        inst.exec = cycle
+                                        inst.status = 3
+                                
+                                elif(processor.addBusy == "Yes"):
+                                    if(inst.execCycle != 4):
+                                        inst.execCycle -= 1
+                                        if(inst.execCycle == 0):
+                                            inst.exec = cycle
+                                            inst.status = 3
+                                            
+                         
+                             
+                                        
+
+                            
+                            
+                            
                                      
                      elif(inst.status == 3):
-                         processor.memBusy = "No"
+                         if(inst.iname == "L.D"):
+                             processor.memBusy = "No"                            
+                             inst.status = 4
+                         elif(inst.iname == "ADD.D" or inst.iname == "SUB.D"):
+                             processor.addBusy = "No"
+                             inst.status = 4
                          inst.write = cycle
-                         inst.status = 4
+                         fpRegistersList.remove(inst.op1)
                             
                                                                                                                             
                              
@@ -114,7 +165,8 @@ class Pipeline:
              x -= 1
          
          for i in instObjs:
-             print(i.fetch,i.decode,i.exec, i.write, i.struct)
+             print(i.fetch,i.decode,i.exec, i.write,i.raw, i.struct)
+         print(functional_units)
          print(functional_units.values())
          
 
@@ -125,7 +177,8 @@ class Processor:
         self.wbBusy = "No"
         self.intBusy = "No"
         self.memBusy = "No"
-        self.memCount = 2
+        self.addBusy = "No"
+        self.mulBusy = "No"
                 
          
 
