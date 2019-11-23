@@ -23,8 +23,8 @@ class Instructions:
         self.waw = 0
         self.struct = "N"
         self.status = 0
-        self.intCount = 1
-        self.memCount = 2
+        self.intCount = 0
+        self.memCount = 0
         self.functionalUnit = None
         self.execCycle = 0
 
@@ -37,6 +37,11 @@ class Instructions:
             self.op2 = inst[2]
             self.op3 = inst[3]
 
+        if self.iname == "L.D":
+            self.intCount = 1
+            self.functionalUnit = "Main memory"
+            self.memCount = int(functional_units[self.functionalUnit])
+
         if self.iname == "ADD.D" or self.iname == "SUB.D":
             self.functionalUnit = "FP adder"
             self.execCycle = int(functional_units[self.functionalUnit][0])
@@ -45,7 +50,8 @@ class Instructions:
             self.functionalUnit = "FP Multiplier"
             self.execCycle = int(functional_units[self.functionalUnit][0])
 
-
+        if self.iname in ["DADD", "DADDI", "DSUB", "DSUBI", "AND", "ANDI", "OR", "ORI"]:
+            self.execCycle = 2
 class Pipeline:
     def __init__(self, instructions):
 
@@ -57,7 +63,7 @@ class Pipeline:
 
         # Iterating Over the instruction objects
         processor = Processor()
-        x = 31
+        x = 40
         cycle = 0
         while x > 0:
             cycle += 1
@@ -127,7 +133,7 @@ class Pipeline:
                                         inst.status = 3
 
                                 elif processor.addBusy == "Yes":
-                                    if inst.execCycle != 4:
+                                    if inst.execCycle != functional_units[inst.functionalUnit][0]:
                                         inst.execCycle -= 1
                                         if inst.execCycle == 0:
                                             inst.exec = cycle
@@ -155,11 +161,28 @@ class Pipeline:
                                         inst.exec = cycle
                                         inst.status = 3
                                 elif processor.mulBusy == "Yes":
-                                    if inst.execCycle != 4:
+                                    if inst.execCycle != functional_units[inst.functionalUnit][0]:
                                         inst.execCycle -= 1
                                         if inst.execCycle == 0:
                                             inst.exec = cycle
                                             inst.status = 3
+                        elif inst.iname in ["DADD", "DADDI", "DSUB", "DSUBI", "AND", "ANDI", "OR", "ORI"]:
+                            if processor.intMemBusy == "No":
+                                processor.dBusy = "No"
+                                processor.intMemBusy = "Yes"
+                                inst.execCycle -=1
+                                if inst.execCycle == 0:
+                                    inst.exec = cycle
+                                    inst.status = 3
+                            elif processor.intMemBusy == "Yes":
+                                if inst.execCycle != 2:
+                                    inst.execCycle -= 1
+                                    if inst.execCycle ==0:
+                                        inst.exec = cycle
+                                        inst.status =3
+
+
+
                     elif inst.status == 3:
                         if inst.iname == "L.D":
                             processor.memBusy = "No"
@@ -169,6 +192,9 @@ class Pipeline:
                             inst.status = 4
                         elif inst.iname == "MUL.D":
                             processor.mulBusy = "No"
+                            inst.status = 4
+                        elif inst.name in ["DADD", "DADDI", "DSUB", "DSUBI", "AND", "ANDI", "OR", "ORI"]:
+                            processor.intMemBusy = "No"
                             inst.status = 4
                         inst.write = cycle
                         fpRegistersList.remove(inst.op1)
@@ -189,6 +215,7 @@ class Processor:
         self.memBusy = "No"
         self.addBusy = "No"
         self.mulBusy = "No"
+        self.intMemBusy = "No"
 
 
 if __name__ == "__main__":

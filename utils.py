@@ -38,7 +38,7 @@ def functionalUnits(units):
     dict1 = {}
     for i in range(len(units)):
         key = units[i].split(":")[0]
-        value1 = units[i].split(":")[1].split(",")[0][1:]
+        value1 = int(units[i].split(":")[1].split(",")[0][1:])
         if "," in units[i]:
             value2 = units[i].split(":")[1].split(",")[1][1:]
             dict1[key] = (value1, value2)
