@@ -15,8 +15,8 @@ def readFiles(path):
 
         for i in range(len(r)):
             r[i] = int(r[i], 2)
-        for i in range(len(r)):
-            r[i] = hex(r[i])
+        # for i in range(len(r)):
+        #     r[i] = hex(r[i])
         return r
     elif "data.txt" in path:
 

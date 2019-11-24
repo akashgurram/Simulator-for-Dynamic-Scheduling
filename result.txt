@@ -1,0 +1,16 @@
+--------------  --  --  --  --  ---  ---  ---  ------
+Instruction     FT  ID  EX  WB  RAW  WAR  WAW  Struct
+L.D F1 4(R4)    1   2   5   6   N    N    N    N
+L.D F2 8(R5)    2   3   7   8   N    N    N    Y
+ADD.D F4 F6 F2  3   8   12  13  Y    N    N    N
+SUB.D F5 F7 F1  8   9   13  14  N    N    N    N
+MUL.D F6 F1 F5  9   14  20  21  Y    N    N    N
+ADD.D F7 F2 F6  14  21  25  26  Y    N    N    N
+ADD.D F6 F1 F7  21  26  30  31  Y    N    N    N
+DADDI R4 R4 4   26  27  29  30  N    N    N    N
+DADDI R5 R5 4   27  28  30  32  N    N    N    Y
+DSUB R1 R1 R2   28  29  31  33  N    N    N    Y
+BNE R1 R3 GG    29  33  0   0   Y    N    N    N
+HLT             33  0   0   0   N    N    N    N
+HLT             0   0   0   0   N    N    N    N
+--------------  --  --  --  --  ---  ---  ---  ------

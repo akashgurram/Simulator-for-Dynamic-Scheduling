@@ -6,6 +6,7 @@ Created on Mon Nov 18 18:48:44 2019
 """
 
 from utils import readFiles, instParsing, functionalUnits
+from tabulate import tabulate
 
 
 class Instructions:
@@ -19,14 +20,15 @@ class Instructions:
         self.exec = 0
         self.write = 0
         self.raw = "N"
-        self.war = 0
-        self.waw = 0
+        self.war = "N"
+        self.waw = "N"
         self.struct = "N"
         self.status = 0
         self.intCount = 0
         self.memCount = 0
         self.functionalUnit = None
         self.execCycle = 0
+        self.finalOutput = []
 
         if len(inst) == 3:
             self.op1 = inst[1]
@@ -65,7 +67,7 @@ class Pipeline:
 
         # Iterating Over the instruction objects
         processor = Processor()
-        x = 40
+        x = 35
         cycle = 0
         while x > 0:
             cycle += 1
@@ -82,22 +84,37 @@ class Pipeline:
 
                     elif inst.status == 1:
                         if inst.op1 not in fpRegistersList:
+                            #if inst.iname != "BNE":
                             fpRegistersList.append(inst.op1)
                             fpInstructionList.append(instObjs.index(inst))
-                        if processor.dBusy == "No":
+                        if processor.dBusy == "No" and inst.iname != "BNE":
                             if inst.op2 not in fpRegistersList and inst.op3 not in fpRegistersList:
                                 processor.dBusy = "Yes"
                                 processor.fBusy = "No"
                                 inst.decode = cycle
                                 inst.status = 2
                             # DO IT FOR OP3 AS WELL
-                            elif inst.op2 in fpRegistersList and fpInstructionList[fpRegistersList.index(inst.op2)] == instObjs.index(inst):
+                            elif (inst.op2 in fpRegistersList and fpInstructionList[fpRegistersList.index(inst.op2)] == instObjs.index(inst))\
+                                or (inst.op3 in fpRegistersList and fpInstructionList[fpRegistersList.index(inst.op3)] == instObjs.index(inst)):
                                 processor.dBusy = "Yes"
                                 processor.fBusy = "No"
                                 inst.decode = cycle
                                 inst.status = 2
                             else:
                                 inst.raw = "Y"
+                        if inst.iname == "BNE":
+                            if inst.op1 in fpRegistersList and not fpInstructionList[fpRegistersList.index(inst.op1)] == instObjs.index(inst):
+                                inst.raw = "Y"
+
+                            else:
+                                processor.dBusy = "Yes"
+                                processor.fBusy = "No"
+                                inst.decode = cycle
+                                inst.status = 2
+
+
+
+
 
                     elif inst.status == 2:
                         if inst.iname == "L.D":
@@ -208,16 +225,14 @@ class Pipeline:
                             elif inst.iname in ["DADD", "DADDI", "DSUB", "DSUBI", "AND", "ANDI", "OR", "ORI"]:
                                 processor.intMemBusy = "No"
                             inst.status = 4
-                            print("Akash:",processor.wbBusy)
                             inst.write = cycle
                             index1 = fpRegistersList.index(inst.op1)
                             fpRegistersList.remove(fpRegistersList[index1])
                             fpInstructionList.remove(fpInstructionList[index1])
-                            tmp = inst.iname
                             processor.wbBusy = ["Yes", cycle]
 
                         else:
-                            print("Binit:",cycle,processor.wbBusy[1])
+
                             if cycle == processor.wbBusy[1]:
                                 inst.struct = "Y"
                             if cycle > processor.wbBusy[1]:
@@ -226,16 +241,37 @@ class Pipeline:
                                 inst.status = 4
                     elif inst.status == 4:
                         if cycle > processor.wbBusy[1]:
-                            print("Hari:",inst.iname, cycle)
                             processor.wbBusy = ["No", 0]
                         inst.status = 5
-                print(inst.iname, inst.fetch, inst.decode, inst.exec, inst.write, inst.raw, inst.struct)
+
             x -= 1
 
-        # for i in instObjs:
-        #     print(i.iname, i.fetch, i.decode, i.exec, i.write, i.raw, i.struct)
-        print(functional_units)
-        print(functional_units.values())
+        for i in instObjs:
+            print(i.iname, i.fetch, i.decode, i.exec, i.write, i.raw, i.struct)
+
+        print(regs)
+
+        for i in range(len(instructions)):
+            instObjs[i].finalOutput.append(" ".join(instructions[i]))
+        for inst in instObjs:
+            inst.finalOutput.append(inst.fetch)
+            inst.finalOutput.append(inst.decode)
+            inst.finalOutput.append(inst.exec)
+            inst.finalOutput.append(inst.write)
+            inst.finalOutput.append(inst.raw)
+            inst.finalOutput.append(inst.war)
+            inst.finalOutput.append(inst.waw)
+            inst.finalOutput.append(inst.struct)
+        table = []
+        headers = ["Instruction", "FT", "ID", "EX", "WB", "RAW", "WAR", "WAW", "Struct"]
+        table.append(headers)
+        for inst in instObjs:
+            table.append(inst.finalOutput)
+        print(tabulate(table))
+
+        f = open('result.txt', 'w')
+        f.write(tabulate(table))
+        f.close()
 
 
 class Processor:
