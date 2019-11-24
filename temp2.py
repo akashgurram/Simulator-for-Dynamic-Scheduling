@@ -124,19 +124,35 @@ class Pipeline:
                                 inst.intCount -= 1
                                 processor.dBusy = "No"
 
-                            elif processor.memBusy == "No":
-                                if inst.memCount == 2:
-                                    inst.memCount = 1
-                                    processor.intBusy = "No"
-                                    processor.memBusy = "Yes"
-                            elif processor.memBusy == "Yes":
-                                if inst.memCount == 2:
-                                    inst.struct = "Y"
-                                if inst.memCount == 1:
-                                    inst.memCount = 0
-                                    inst.exec = cycle
+                            # elif processor.memBusy == "No":
+                            #     if inst.memCount == 2:
+                            #         inst.memCount = 1
+                            #         processor.intBusy = "No"
+                            #         processor.memBusy = "Yes"
+                            # elif processor.memBusy == "Yes":
+                            #     if inst.memCount == 2:
+                            #         inst.struct = "Y"
+                            #     if inst.memCount == 1:
+                            #         inst.memCount = 0
+                            #         inst.exec = cycle
+                            #
+                            #         inst.status = 3
 
-                                    inst.status = 3
+                            else:
+                                if processor.memBusy[0] == "No" or processor.memBusy[1] == instObjs.index(inst):
+                                    if processor.memBusy[0] == "No":
+                                        processor.intBusy = "No"
+                                    processor.memBusy[0] = "Yes"
+                                    processor.memBusy[1] = instObjs.index(inst)
+                                    inst.memCount -= 1
+
+                                    if(inst.memCount == 0):
+                                        inst.exec = cycle
+                                        inst.status = 3
+
+                                else:
+                                 inst.struct = "Y"
+
 
 
                         ## YET TO ADD THE HAZARDS BOTH STRUCT  and make the pipelined auto instead of manual
@@ -198,11 +214,12 @@ class Pipeline:
                                 inst.intCount -= 1
                                 processor.dBusy = "No"
 
-                            elif processor.memBusy == "No":
+                            elif processor.memBusy[0] == "No":
                                 if inst.memCount == 1:
                                     inst.memCount = 0
                                     processor.intBusy = "No"
-                                    processor.memBusy = "No"
+                                    processor.memBusy[0] = "No"
+                                    processor.memBusy[1] = None
 
                                 inst.exec = cycle
                                 inst.status = 3
@@ -214,7 +231,9 @@ class Pipeline:
 
                         if processor.wbBusy[0] == "No":
                             if inst.iname == "L.D":
-                                processor.memBusy = "No"
+                                processor.memBusy[0] = "No"
+                                processor.memBusy[1] = None
+
 
                             elif inst.iname == "ADD.D" or inst.iname == "SUB.D":
                                 processor.addBusy = "No"
@@ -224,6 +243,7 @@ class Pipeline:
 
                             elif inst.iname in ["DADD", "DADDI", "DSUB", "DSUBI", "AND", "ANDI", "OR", "ORI"]:
                                 processor.intMemBusy = "No"
+                                self.calculate(inst.iname, inst.op1, inst.op2, inst.op3)
                             inst.status = 4
                             inst.write = cycle
                             index1 = fpRegistersList.index(inst.op1)
@@ -273,6 +293,11 @@ class Pipeline:
         f.write(tabulate(table))
         f.close()
 
+    def calculate(self, inst, op1, op2, op3):
+        if inst == "DADDI":
+            regs[int(op1[1:])] = regs[int(op2[1:])] + int(op3)
+        elif inst == "DSUB":
+            regs[int(op1[1:])] = regs[int(op2[1:])] - regs[int(op3[1:])]
 
 class Processor:
     def __init__(self):
@@ -280,7 +305,7 @@ class Processor:
         self.dBusy = "No"
         self.wbBusy = ["No", 0]
         self.intBusy = "No"
-        self.memBusy = "No"
+        self.memBusy = ["No", None]
         self.addBusy = "No"
         self.mulBusy = "No"
         self.intMemBusy = "No"
