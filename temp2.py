@@ -70,7 +70,7 @@ class Pipeline:
         while x > 0:
             cycle += 1
             for inst in instObjs:
-                if inst.status != 4:
+                if inst.status != 5:
                     if inst.status == 0:
                         if processor.fBusy == "No":
                             processor.fBusy = "Yes"
@@ -161,8 +161,6 @@ class Pipeline:
                                 if inst.execCycle == 0:
                                     inst.exec = cycle
                                     inst.status = 3
-
-
                             else:
                                 if processor.mulBusy == "No":
                                     processor.dBusy = "No"
@@ -196,26 +194,46 @@ class Pipeline:
 
 
                     elif inst.status == 3:
-                        if inst.iname == "L.D":
-                            processor.memBusy = "No"
+
+                        if processor.wbBusy[0] == "No":
+                            if inst.iname == "L.D":
+                                processor.memBusy = "No"
+
+                            elif inst.iname == "ADD.D" or inst.iname == "SUB.D":
+                                processor.addBusy = "No"
+
+                            elif inst.iname == "MUL.D":
+                                processor.mulBusy = "No"
+
+                            elif inst.iname in ["DADD", "DADDI", "DSUB", "DSUBI", "AND", "ANDI", "OR", "ORI"]:
+                                processor.intMemBusy = "No"
                             inst.status = 4
-                        elif inst.iname == "ADD.D" or inst.iname == "SUB.D":
-                            processor.addBusy = "No"
-                            inst.status = 4
-                        elif inst.iname == "MUL.D":
-                            processor.mulBusy = "No"
-                            inst.status = 4
-                        elif inst.iname in ["DADD", "DADDI", "DSUB", "DSUBI", "AND", "ANDI", "OR", "ORI"]:
-                            processor.intMemBusy = "No"
-                            inst.status = 4
-                        inst.write = cycle
-                        index1 = fpRegistersList.index(inst.op1)
-                        fpRegistersList.remove(fpRegistersList[index1])
-                        fpInstructionList.remove(fpInstructionList[index1])
+                            print("Akash:",processor.wbBusy)
+                            inst.write = cycle
+                            index1 = fpRegistersList.index(inst.op1)
+                            fpRegistersList.remove(fpRegistersList[index1])
+                            fpInstructionList.remove(fpInstructionList[index1])
+                            tmp = inst.iname
+                            processor.wbBusy = ["Yes", cycle]
+
+                        else:
+                            print("Binit:",cycle,processor.wbBusy[1])
+                            if cycle == processor.wbBusy[1]:
+                                inst.struct = "Y"
+                            if cycle > processor.wbBusy[1]:
+                                inst.write = cycle
+                                processor.wbBusy = ["Yes", cycle]
+                                inst.status = 4
+                    elif inst.status == 4:
+                        if cycle > processor.wbBusy[1]:
+                            print("Hari:",inst.iname, cycle)
+                            processor.wbBusy = ["No", 0]
+                        inst.status = 5
+                print(inst.iname, inst.fetch, inst.decode, inst.exec, inst.write, inst.raw, inst.struct)
             x -= 1
 
-        for i in instObjs:
-            print(i.fetch, i.decode, i.exec, i.write, i.raw, i.struct)
+        # for i in instObjs:
+        #     print(i.iname, i.fetch, i.decode, i.exec, i.write, i.raw, i.struct)
         print(functional_units)
         print(functional_units.values())
 
@@ -224,7 +242,7 @@ class Processor:
     def __init__(self):
         self.fBusy = "No"
         self.dBusy = "No"
-        self.wbBusy = "No"
+        self.wbBusy = ["No", 0]
         self.intBusy = "No"
         self.memBusy = "No"
         self.addBusy = "No"
