@@ -51,11 +51,13 @@ class Instructions:
             self.execCycle = int(functional_units[self.functionalUnit][0])
 
         if self.iname in ["DADD", "DADDI", "DSUB", "DSUBI", "AND", "ANDI", "OR", "ORI"]:
-            self.execCycle = 2
+            self.intCount = 1
+            self.memCount = 1
 class Pipeline:
     def __init__(self, instructions):
 
         fpRegistersList = []
+        fpInstructionList = []
         instObjs = []
         for i in instructions:
             print(i)
@@ -72,15 +74,24 @@ class Pipeline:
                     if inst.status == 0:
                         if processor.fBusy == "No":
                             processor.fBusy = "Yes"
-                            fpRegistersList.append(inst.op1)
+                            #fpRegistersList.append(inst.op1)
                             inst.fetch = cycle
                             inst.status = 1
 
 
 
                     elif inst.status == 1:
+                        if inst.op1 not in fpRegistersList:
+                            fpRegistersList.append(inst.op1)
+                            fpInstructionList.append(instObjs.index(inst))
                         if processor.dBusy == "No":
-                            if not (inst.op2 in fpRegistersList) and not (inst.op3 in fpRegistersList):
+                            if inst.op2 not in fpRegistersList and inst.op3 not in fpRegistersList:
+                                processor.dBusy = "Yes"
+                                processor.fBusy = "No"
+                                inst.decode = cycle
+                                inst.status = 2
+                            # DO IT FOR OP3 AS WELL
+                            elif inst.op2 in fpRegistersList and fpInstructionList[fpRegistersList.index(inst.op2)] == instObjs.index(inst):
                                 processor.dBusy = "Yes"
                                 processor.fBusy = "No"
                                 inst.decode = cycle
@@ -167,19 +178,20 @@ class Pipeline:
                                             inst.exec = cycle
                                             inst.status = 3
                         elif inst.iname in ["DADD", "DADDI", "DSUB", "DSUBI", "AND", "ANDI", "OR", "ORI"]:
-                            if processor.intMemBusy == "No":
+                            if processor.intBusy == "No" and inst.intCount == 1:
+                                processor.intBusy = "Yes"
+                                inst.intCount -= 1
                                 processor.dBusy = "No"
-                                processor.intMemBusy = "Yes"
-                                inst.execCycle -=1
-                                if inst.execCycle == 0:
-                                    inst.exec = cycle
-                                    inst.status = 3
-                            elif processor.intMemBusy == "Yes":
-                                if inst.execCycle != 2:
-                                    inst.execCycle -= 1
-                                    if inst.execCycle ==0:
-                                        inst.exec = cycle
-                                        inst.status =3
+
+                            elif processor.memBusy == "No":
+                                if inst.memCount == 1:
+                                    inst.memCount = 0
+                                    processor.intBusy = "No"
+                                    processor.memBusy = "No"
+
+                                inst.exec = cycle
+                                inst.status = 3
+
 
 
 
@@ -193,11 +205,13 @@ class Pipeline:
                         elif inst.iname == "MUL.D":
                             processor.mulBusy = "No"
                             inst.status = 4
-                        elif inst.name in ["DADD", "DADDI", "DSUB", "DSUBI", "AND", "ANDI", "OR", "ORI"]:
+                        elif inst.iname in ["DADD", "DADDI", "DSUB", "DSUBI", "AND", "ANDI", "OR", "ORI"]:
                             processor.intMemBusy = "No"
                             inst.status = 4
                         inst.write = cycle
-                        fpRegistersList.remove(inst.op1)
+                        index1 = fpRegistersList.index(inst.op1)
+                        fpRegistersList.remove(fpRegistersList[index1])
+                        fpInstructionList.remove(fpInstructionList[index1])
             x -= 1
 
         for i in instObjs:
