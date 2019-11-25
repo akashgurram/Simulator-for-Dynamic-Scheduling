@@ -83,10 +83,13 @@ class Pipeline:
 
 
                     elif inst.status == 1:
+
                         if inst.op1 not in fpRegistersList:
-                            #if inst.iname != "BNE":
                             fpRegistersList.append(inst.op1)
                             fpInstructionList.append(instObjs.index(inst))
+                        if inst.op1 in fpRegistersList and fpInstructionList[fpRegistersList.index(inst.op1)] != instObjs.index(inst) and inst.iname != "BNE":
+                            inst.waw = "Y"
+                            continue
                         if processor.dBusy == "No" and inst.iname != "BNE":
                             if inst.op2 not in fpRegistersList and inst.op3 not in fpRegistersList:
                                 processor.dBusy = "Yes"
@@ -111,6 +114,7 @@ class Pipeline:
                                 processor.fBusy = "No"
                                 inst.decode = cycle
                                 inst.status = 2
+
 
 
 
@@ -246,6 +250,7 @@ class Pipeline:
                                 self.calculate(inst.iname, inst.op1, inst.op2, inst.op3)
                             inst.status = 4
                             inst.write = cycle
+                            print(fpRegistersList)
                             index1 = fpRegistersList.index(inst.op1)
                             fpRegistersList.remove(fpRegistersList[index1])
                             fpInstructionList.remove(fpInstructionList[index1])
