@@ -39,7 +39,7 @@ class Instructions:
             self.op2 = inst[2]
             self.op3 = inst[3]
 
-        if self.iname == "L.D":
+        if self.iname in ["L.D", "S.D", "LW", "SW"]:
             self.intCount = 1
             self.functionalUnit = "Main memory"
             self.memCount = int(functional_units[self.functionalUnit])
@@ -62,7 +62,6 @@ class Pipeline:
         fpInstructionList = []
         instObjs = []
         for i in instructions:
-            print(i)
             instObjs.append(Instructions(i))
 
         # Iterating Over the instruction objects
@@ -73,8 +72,6 @@ class Pipeline:
         while x > 0:
 
             cycle += 1
-            if cycle == 35:
-                print("X", vars(processor))
             for inst in instObjs:
                 if inst.status != 5:
                     if inst.status == 0:
@@ -88,50 +85,50 @@ class Pipeline:
 
 
                     elif inst.status == 1:
-                        print("XXX",inst.iname, cycle)
                         if inst.iname == "HLT" and instObjs[instObjs.index(inst)-1].iname != "HLT":
                             processor.fBusy = "No"
                             inst.status = 5
                             continue
                         elif inst.iname == "HLT" and instObjs[instObjs.index(inst)-1].iname == "HLT":
-                            print("IDHAR AARA HAI")
                             instObjs[instObjs.index(inst)-1].decode = cycle-1
                             processor.fBusy = "No"
-
                             inst.status = 5
 
                         if inst.op1 not in fpRegistersList and inst.iname != "BNE" and inst.iname != "HLT":
                             fpRegistersList.append(inst.op1)
                             fpInstructionList.append(instObjs.index(inst))
-                        if inst.op1 in fpRegistersList and fpInstructionList[fpRegistersList.index(inst.op1)] != instObjs.index(inst) and inst.iname != "BNE":
+                        if inst.op1 in fpRegistersList and fpInstructionList[fpRegistersList.index(inst.op1)] != instObjs.index(inst) and inst.iname != "BNE" and inst.iname != "HLT":
                             inst.waw = "Y"
                             continue
                         if processor.dBusy == "No" and inst.iname != "BNE" and inst.iname != "HLT":
-                            if cycle == 35:
-                                print("AAAAAAAAAAAAAAAAAAAAAAAAAA")
                             if inst.op2 not in fpRegistersList and inst.op3 not in fpRegistersList:
-                                processor.dBusy = "Yes"
-                                print("This is making DBUSyXYZ", cycle, inst.iname)
-                                processor.fBusy = "No"
+                                #processor.dBusy = "Yes"
+                                #processor.fBusy = "No"
+                                print("COMING HERE", cycle, processor.addBusy, inst.op1)
+                                if inst.iname == "ADD.D":
+                                    if processor.addBusy == "No":
+                                        inst.decode = cycle
+                                        processor.dBusy = "Yes"
+                                        processor.fBusy = "No"
+                                        inst.status = 2
+                                else:
+                                    inst.decode = cycle
+                                    processor.dBusy = "Yes"
+                                    processor.fBusy = "No"
+                                    inst.status = 2
 
-                                inst.decode = cycle
-                                inst.status = 2
-                            # DO IT FOR OP3 AS WELL
+                            # DO IT FOR OP3 AS WELL - Done
                             elif (inst.op2 in fpRegistersList and fpInstructionList[fpRegistersList.index(inst.op2)] == instObjs.index(inst))\
                                 or (inst.op3 in fpRegistersList and fpInstructionList[fpRegistersList.index(inst.op3)] == instObjs.index(inst)):
-
                                 processor.dBusy = "Yes"
                                 processor.fBusy = "No"
                                 inst.decode = cycle
                                 inst.status = 2
                             else:
-                                print(fpRegistersList)
-                                print("SSSS", cycle)
                                 inst.raw = "Y"
                         elif inst.iname == "BNE":
                             if inst.op1 in fpRegistersList and not fpInstructionList[fpRegistersList.index(inst.op1)] == instObjs.index(inst):
                                 inst.raw = "Y"
-
                             else:
                                 processor.dBusy = "Yes"
                                 processor.fBusy = "No"
@@ -141,6 +138,7 @@ class Pipeline:
                                 if regs[int(inst.op1[1:])] != regs[int(inst.op2[1:])]:
 
                                     for p in loop:
+                                        print("COMINNNNNNN", loop, inst.iname)
                                         if p[0] == inst.op3:
                                             z = p[1]
 
@@ -159,7 +157,7 @@ class Pipeline:
 
 
                     elif inst.status == 2:
-                        if inst.iname == "L.D":
+                        if inst.iname in ["L.D", "S.D", "LW", "SW"]:
                             if processor.intBusy == "No" and inst.intCount == 1:
                                 processor.intBusy = "Yes"
                                 inst.intCount -= 1
@@ -180,7 +178,6 @@ class Pipeline:
                             #         inst.status = 3
 
                             else:
-                                print(cycle, processor.memBusy)
                                 if processor.memBusy[0] == "No" or processor.memBusy[1] == instObjs.index(inst):
                                     if processor.memBusy[0] == "No":
                                         processor.intBusy = "No"
@@ -208,12 +205,15 @@ class Pipeline:
                                     processor.dBusy = "No"
                                 inst.execCycle -= 1
                                 if inst.execCycle == 0:
+                                    processor.addBusy = "No"
                                     inst.exec = cycle
                                     inst.status = 3
-                            #MAKE THE PIPELINED WORK FOR THIS AS WELL
                             else:
                                 if processor.addBusy == "No":
+                                    #CHANGE THIS FOR MUL AND DIV AS WELL
+                                    #inst.decode = cycle-1
                                     processor.dBusy = "No"
+                                    print("HHH", cycle, inst.op1)
                                     processor.addBusy = "Yes"
                                     inst.execCycle -= 1
                                     if inst.execCycle == 0:
@@ -225,9 +225,11 @@ class Pipeline:
                                     if inst.execCycle != functional_units[inst.functionalUnit][0]:
                                         inst.execCycle -= 1
                                         if inst.execCycle == 0:
+                                            print("www", cycle, inst.op1)
+                                            processor.addBusy = "No"
                                             inst.exec = cycle
                                             inst.status = 3
-
+                        # MAKE THE PIPELINED WORK FOR THIS AS WELL
                         elif inst.iname == "MUL.D":
                             pipelined = functional_units[inst.functionalUnit][1]
                             if pipelined == "yes":
@@ -235,12 +237,15 @@ class Pipeline:
 
                                     processor.dBusy = "No"
                                     processor.mulBusy = "Yes"
+                                else:
+                                    processor.dBusy = "No"
                                 inst.execCycle -= 1
                                 if inst.execCycle == 0:
                                     inst.exec = cycle
                                     inst.status = 3
                             else:
                                 if processor.mulBusy == "No":
+                                    #inst.decode = cycle-1
                                     processor.dBusy = "No"
                                     processor.mulBusy = "Yes"
                                     inst.execCycle -= 1
@@ -248,6 +253,7 @@ class Pipeline:
                                         inst.exec = cycle
                                         inst.status = 3
                                 elif processor.mulBusy == "Yes":
+                                    processor.dBusy = "No"
                                     if inst.execCycle != functional_units[inst.functionalUnit][0]:
                                         inst.execCycle -= 1
                                         if inst.execCycle == 0:
@@ -275,14 +281,14 @@ class Pipeline:
                     elif inst.status == 3:
 
                         if processor.wbBusy[0] == "No":
-                            if inst.iname == "L.D":
-                                print("CC", cycle)
+                            if inst.iname in ["L.D", "S.D", "LW", "SW"]:
                                 processor.memBusy[0] = "No"
                                 processor.memBusy[1] = None
 
 
                             elif inst.iname == "ADD.D" or inst.iname == "SUB.D":
-                                processor.addBusy = "No"
+                                #processor.addBusy = "No"
+                                pass
 
                             elif inst.iname == "MUL.D":
                                 processor.mulBusy = "No"
@@ -292,7 +298,6 @@ class Pipeline:
                                 self.calculate(inst.iname, inst.op1, inst.op2, inst.op3)
                             inst.status = 4
                             inst.write = cycle
-                            print(fpRegistersList)
                             index1 = fpRegistersList.index(inst.op1)
                             fpRegistersList.remove(fpRegistersList[index1])
                             fpInstructionList.remove(fpInstructionList[index1])
