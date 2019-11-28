@@ -11,6 +11,7 @@ from tabulate import tabulate
 
 class Instructions:
     def __init__(self, inst):
+        self.finalName = " ".join(inst)
         self.iname = inst[0]
         self.op1 = 0
         self.op2 = 0
@@ -75,14 +76,34 @@ class Pipeline:
         x = 70
         cycle = 0
         newLoop = False
+        instructionCache = {0: [], 1: [], 2: [], 3: []}
+        cacheMissPen = 2 * (functional_units["I-Cache"] + functional_units["Main memory"])
+        cacheHit = 0
         while x > 0:
 
             cycle += 1
             for inst in instObjs:
                 if inst.status != 5:
+
                     # FETCH IS BEING DONE AND IS SOLID FOR NOW  -> Yet to ADD Instruction Cache
+
+
                     if inst.status == 0:
+
                         if processor.fBusy == "No":
+                            blockNo = int(instObjs.index(inst) / 4) % 4
+                            print("block no", blockNo)
+                            print("inst no", instObjs.index(inst), inst.iname, id(inst))
+
+                            #if id(instObjs[instObjs.index(inst)]) in instructionCache[blockNo]:
+                            if any(instObjs.index(inst) % 13 in c for c in instructionCache.values()):
+                                print("Present", instructionCache[blockNo])
+                                cacheHit += 1
+                            else:
+                                print("Not present", instructionCache[blockNo])
+                                instructionCache[blockNo] = list(range(instObjs.index(inst) % 13, instObjs.index(inst) % 13 + 4))
+
+                            print(instructionCache.values())
                             processor.fBusy = "Yes"
                             inst.fetch = cycle
                             inst.status = 1
@@ -307,8 +328,8 @@ class Pipeline:
                                 if inst.memCount == 1:
                                     inst.memCount = 0
                                     processor.intBusy = "No"
-                                    processor.memBusy[0] = "No"
-                                    processor.memBusy[1] = None
+                                    processor.memBusy[0] = "Yes"
+                                    processor.memBusy[1] = instObjs.index(inst)
 
                                 inst.exec = cycle
                                 inst.status = 3
@@ -334,6 +355,8 @@ class Pipeline:
 
                             elif inst.iname in ["DADD", "DADDI", "DSUB", "DSUBI", "AND", "ANDI", "OR", "ORI"]:
                                 #processor.intMemBusy = "No"
+                                processor.memBusy[0] = "No"
+                                processor.memBusy[1] = None
                                 self.calculate(inst.iname, inst.op1, inst.op2, inst.op3)
                             inst.status = 4
                             inst.write = cycle
@@ -346,6 +369,9 @@ class Pipeline:
 
                             if cycle == processor.wbBusy[1]:
                                 inst.struct = "Y"
+                                print("COMIN", cycle)
+                                if inst.iname in ["DADDI", "DSUB"]:
+                                    inst.exec = cycle
                             if cycle > processor.wbBusy[1]:
                                 inst.write = cycle
                                 if inst.iname in ["ADD.D", "SUB.D"]:
@@ -358,6 +384,7 @@ class Pipeline:
                                     index1 = fpRegistersList.index(inst.op1)
                                     fpRegistersList.remove(fpRegistersList[index1])
                                     fpInstructionList.remove(fpInstructionList[index1])
+
                                 processor.wbBusy = ["Yes", cycle]
                                 inst.status = 4
                     elif inst.status == 4:
@@ -384,7 +411,8 @@ class Pipeline:
         #     instObjs[i].finalOutput.append(" ".join(instructions[i]))
 
         for inst in instObjs:
-            inst.finalOutput.append(inst.iname+","+str(inst.op1)+","+str(inst.op2)+","+str(inst.op3))
+            inst.finalOutput.append(inst.finalName)
+            #inst.finalOutput.append(inst.iname+","+str(inst.op1)+","+str(inst.op2)+","+str(inst.op3))
             inst.finalOutput.append(inst.fetch)
             inst.finalOutput.append(inst.decode)
             inst.finalOutput.append(inst.exec)
@@ -403,7 +431,7 @@ class Pipeline:
         for inst in instObjs:
             table.append(inst.finalOutput)
         print(tabulate(table))
-
+        print("Cache hit", cacheHit)
         f = open('result.txt', 'w')
         f.write(tabulate(table))
         f.close()
