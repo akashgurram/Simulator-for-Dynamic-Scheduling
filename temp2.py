@@ -7,11 +7,15 @@ Created on Mon Nov 18 18:48:44 2019
 
 from utils import readFiles, instParsing, functionalUnits
 from tabulate import tabulate
+import copy
 
 
 class Instructions:
     def __init__(self, inst):
         self.finalName = " ".join(inst)
+        self.instCacheMiss = False
+        self.instSpecialFlag = False
+        self.wordAddress = 0
         self.iname = inst[0]
         self.op1 = 0
         self.op2 = 0
@@ -71,14 +75,24 @@ class Pipeline:
         for i in instructions:
             instObjs.append(Instructions(i))
 
+        for i in range(len(instObjs)):
+            instObjs[i].wordAddress = i
+
+        #Appending the loop to the isntructions that require to the finalName to be displayed in the table
+        for i in loop:
+            instObjs[i[1]].finalName = i[0] + ": " +instObjs[i[1]].finalName
+
+        newInstObjs = copy.deepcopy(instObjs)
         # Iterating Over the instruction objects
         processor = Processor()
-        x = 70
+        x = 100
         cycle = 0
         newLoop = False
         instructionCache = {0: [], 1: [], 2: [], 3: []}
         cacheMissPen = 2 * (functional_units["I-Cache"] + functional_units["Main memory"])
-        cacheHit = 0
+        icacheHit = 0
+        iaccessReq = 0
+        onetimeAssignFlag = True
         while x > 0:
 
             cycle += 1
@@ -90,23 +104,36 @@ class Pipeline:
 
                     if inst.status == 0:
 
-                        if processor.fBusy == "No":
-                            blockNo = int(instObjs.index(inst) / 4) % 4
-                            print("block no", blockNo)
-                            print("inst no", instObjs.index(inst), inst.iname, id(inst))
+                        if processor.fBusy == "No" or inst.instSpecialFlag == True :
+                            blockNo = int(inst.wordAddress / 4) % 4
 
-                            #if id(instObjs[instObjs.index(inst)]) in instructionCache[blockNo]:
-                            if any(instObjs.index(inst) % 13 in c for c in instructionCache.values()):
-                                print("Present", instructionCache[blockNo])
-                                cacheHit += 1
-                            else:
-                                print("Not present", instructionCache[blockNo])
-                                instructionCache[blockNo] = list(range(instObjs.index(inst) % 13, instObjs.index(inst) % 13 + 4))
 
-                            print(instructionCache.values())
+                            if onetimeAssignFlag == True:
+                                if inst.wordAddress in instructionCache[blockNo]:
+                                    icacheHit += 1
+                                    iaccessReq += 1
+                                else:
+                                    instructionCache[blockNo] = list(range(inst.wordAddress, inst.wordAddress + 4))
+                                    inst.instCacheMiss = True
+                                    iaccessReq += 1
+                                if inst.instCacheMiss:
+                                    instructionCycles = cacheMissPen
+                                    onetimeAssignFlag = False
+                                else:
+                                    instructionCycles = functional_units["I-Cache"]
+                                    onetimeAssignFlag = False
+
+
                             processor.fBusy = "Yes"
-                            inst.fetch = cycle
-                            inst.status = 1
+                            inst.instSpecialFlag = True
+
+                            instructionCycles -= 1
+                            if(instructionCycles== 0):
+                                inst.fetch = cycle
+                                onetimeAssignFlag = True
+                                inst.status = 1
+
+
 
                     # DECODE IS BEING DONE AND NOT SOLID
                     elif inst.status == 1:
@@ -214,11 +241,7 @@ class Pipeline:
                                     for p in loop:
                                         if p[0] == inst.op3:
                                             z = p[1]
-
-                                    newInstructions = instructions[z:]
-                                    newInstructionsObjs = []
-                                    for n in newInstructions:
-                                        newInstructionsObjs.append(Instructions(n))
+                                    newInstructions = newInstObjs[z:]
                                     newLoop = True
                                     processor.dBusy = "No"
                                     inst.status = 5
@@ -369,7 +392,6 @@ class Pipeline:
 
                             if cycle == processor.wbBusy[1]:
                                 inst.struct = "Y"
-                                print("COMIN", cycle)
                                 if inst.iname in ["DADDI", "DSUB"]:
                                     inst.exec = cycle
                             if cycle > processor.wbBusy[1]:
@@ -397,7 +419,7 @@ class Pipeline:
                 processor.dBusy = "No"
                 processor.wbBusy = ["No", 0]
                 instObjs.pop()
-                instObjs += newInstructionsObjs
+                instObjs += newInstructions
                 newLoop = False
                 cycle -= 1
             x -= 1
@@ -431,16 +453,40 @@ class Pipeline:
         for inst in instObjs:
             table.append(inst.finalOutput)
         print(tabulate(table))
-        print("Cache hit", cacheHit)
+        print("Cache hit", icacheHit)
+        print("Access req", iaccessReq)
         f = open('result.txt', 'w')
-        f.write(tabulate(table))
+        f.write(tabulate(table, tablefmt="plain"))
+        f.write("\n\nTotal number of access requests for instruction cache: " + repr(iaccessReq))
+        f.write("\n\nNumber of instruction cache hits: " + repr(icacheHit))
+        f.write("\n\nTotal number of access requests for data cache: ")
+        f.write("\n\nNumber of data cache hits: ")
         f.close()
 
     def calculate(self, inst, op1, op2, op3):
-        if inst == "DADDI":
+        if inst == "DADD":
+            regs[int(op1[1:])] = regs[int(op2[1:])] + regs[int(op3[1:])]
+
+        elif inst == "DADDI":
             regs[int(op1[1:])] = regs[int(op2[1:])] + int(op3)
+
         elif inst == "DSUB":
             regs[int(op1[1:])] = regs[int(op2[1:])] - regs[int(op3[1:])]
+
+        elif inst == "DSUBI":
+            regs[int(op1[1:])] = regs[int(op2[1:])] - int(op3)
+
+        elif inst == "AND":
+            regs[int(op1[1:])] = regs[int(op2[1:])] & regs[int(op3[1:])]
+
+        elif inst == "ANDI":
+            regs[int(op1[1:])] = regs[int(op2[1:])] & int(op3)
+
+        elif inst == "OR":
+            regs[int(op1[1:])] = regs[int(op2[1:])] | regs[int(op3[1:])]
+
+        elif inst == "ORI":
+            regs[int(op1[1:])] = regs[int(op2[1:])] | int(op3)
 
 class Processor:
     def __init__(self):
@@ -456,10 +502,9 @@ class Processor:
 
 
 if __name__ == "__main__":
-    regs = readFiles("D:\\Fall 2019\\ACA\\Project\\reg.txt")
-    dataLoc = readFiles("D:\\Fall 2019\\ACA\\Project\\data.txt")
-    functional_units = readFiles("D:\\Fall 2019\\ACA\\Project\\config.txt")
-    loop, instructions = readFiles("D:\\Fall 2019\\ACA\\Project\\inst.txt")
+    regs = readFiles("reg.txt")
+    dataLoc = readFiles("data.txt")
+    functional_units = readFiles("config.txt")
+    loop, instructions = readFiles("inst.txt")
 
-    print(loop)
     Pipeline(instructions)
