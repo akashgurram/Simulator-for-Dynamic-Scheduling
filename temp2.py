@@ -15,6 +15,7 @@ class Instructions:
         self.finalName = " ".join(inst)
         self.instCacheMiss = False
         self.instSpecialFlag = False
+        self.dataSpecialFlag = False
         self.wordAddress = 0
         self.iname = inst[0]
         self.op1 = 0
@@ -89,6 +90,7 @@ class Pipeline:
         cycle = 0
         newLoop = False
         instructionCache = {0: [], 1: [], 2: [], 3: []}
+        dataCache = {0:[[], []], 1: [[], []]}
         cacheMissPen = 2 * (functional_units["I-Cache"] + functional_units["Main memory"])
         icacheHit = 0
         iaccessReq = 0
@@ -166,35 +168,62 @@ class Pipeline:
                                 if inst.iname == "ADD.D":
                                     # Stalling the Inst in the decode stage itself if it's exec stage is not available
                                     # DO THIS FOR THE OTHER INSTRUCTIONS AS WELL
-                                    if processor.addBusy == "No":
+                                    pipelined = functional_units[inst.functionalUnit][1]
+                                    if pipelined == "no":
+                                        if processor.addBusy == "No":
+                                            inst.decode = cycle
+                                            processor.dBusy = "Yes"
+                                            processor.fBusy = "No"
+                                            inst.status = 2
+                                        else:
+                                            inst.struct = "Y"
+
+                                    else:  # NOT PIPELINED
                                         inst.decode = cycle
                                         processor.dBusy = "Yes"
                                         processor.fBusy = "No"
                                         inst.status = 2
-                                    else:
-                                        inst.struct = "Y"
 
                                 elif inst.iname == "MUL.D":
                                     # Stalling the Inst in the decode stage itself if it's exec stage is not available
                                     # DO THIS FOR THE OTHER INSTRUCTIONS AS WELL
-                                    if processor.mulBusy == "No":
+                                    pipelined = functional_units[inst.functionalUnit][1]
+                                    if pipelined == "no":
+                                        if processor.mulBusy == "No":
+                                            inst.decode = cycle
+                                            processor.dBusy = "Yes"
+                                            processor.fBusy = "No"
+                                            inst.status = 2
+                                        else:
+                                            inst.struct = "Y"
+
+                                    else:  # NOT PIPELINED
                                         inst.decode = cycle
                                         processor.dBusy = "Yes"
                                         processor.fBusy = "No"
                                         inst.status = 2
-                                    else:
-                                        inst.struct = "Y"
+
+
 
                                 elif inst.iname == "DIV.D":
                                     # Stalling the Inst in the decode stage itself if it's exec stage is not available
                                     # DO THIS FOR THE OTHER INSTRUCTIONS AS WELL
-                                    if processor.divBusy == "No":
+                                    pipelined = functional_units[inst.functionalUnit][1]
+                                    if pipelined == "No":
+                                        if processor.divBusy == "No":
+                                            inst.decode = cycle
+                                            processor.dBusy = "Yes"
+                                            processor.fBusy = "No"
+                                            inst.status = 2
+                                        else:
+                                            inst.struct = "Y"
+
+                                    else:  # NOT PIPELINED
                                         inst.decode = cycle
                                         processor.dBusy = "Yes"
                                         processor.fBusy = "No"
                                         inst.status = 2
-                                    else:
-                                        inst.struct = "Y"
+
 
                                 else:
                                     inst.decode = cycle
@@ -246,6 +275,28 @@ class Pipeline:
                                     processor.dBusy = "No"
                                     inst.status = 5
                                     break
+
+                        # Branching case if Instruction name is J
+                        elif inst.iname in ["J"]:
+                            processor.dBusy = "Yes"
+                            processor.fBusy = "No"
+                            inst.decode = cycle
+                            inst.status = 2
+
+
+
+                            for p in loop:
+                                if p[0] == inst.op3:
+                                    z = p[1]
+                            newInstructions = newInstObjs[z:]
+                            newLoop = True
+                            processor.dBusy = "No"
+                            inst.status = 5
+                            break
+
+
+
+
 
                     # EXECUTION IS BEING DONE HERE . NOT SOLID
                     elif inst.status == 2:
@@ -341,6 +392,40 @@ class Pipeline:
                                             processor.mulBusy = "No"
                                             inst.exec = cycle
                                             inst.status = 3
+
+                        elif inst.iname == "DIV.D":
+                            pipelined = functional_units[inst.functionalUnit][1]
+                            if pipelined == "yes":
+                                if processor.divBusy == "No":
+
+                                    processor.dBusy = "No"
+                                    processor.divBusy = "Yes"
+                                else:
+                                    processor.dBusy = "No"
+                                inst.execCycle -= 1
+                                if inst.execCycle == 0:
+                                    processor.divBusy = "No"
+                                    inst.exec = cycle
+                                    inst.status = 3
+                            else:
+                                if processor.divBusy == "No":
+                                    processor.dBusy = "No"
+                                    processor.divBusy = "Yes"
+                                    inst.execCycle -= 1
+                                    if inst.execCycle == 0:
+                                        processor.divBusy = "No"
+                                        inst.exec = cycle
+                                        inst.status = 3
+                                elif processor.divBusy == "Yes":
+                                    processor.dBusy = "No"
+                                    if inst.execCycle != functional_units[inst.functionalUnit][0]:
+                                        inst.execCycle -= 1
+                                        if inst.execCycle == 0:
+                                            processor.divBusy = "No"
+                                            inst.exec = cycle
+                                            inst.status = 3
+
+
                         elif inst.iname in ["DADD", "DADDI", "DSUB", "DSUBI", "AND", "ANDI", "OR", "ORI"]:
                             if processor.intBusy == "No" and inst.intCount == 1:
                                 processor.intBusy = "Yes"
@@ -453,8 +538,8 @@ class Pipeline:
         for inst in instObjs:
             table.append(inst.finalOutput)
         print(tabulate(table))
-        print("Cache hit", icacheHit)
-        print("Access req", iaccessReq)
+        print("I Cache hit", icacheHit)
+        print("I Access req", iaccessReq)
         f = open('result.txt', 'w')
         f.write(tabulate(table, tablefmt="plain"))
         f.write("\n\nTotal number of access requests for instruction cache: " + repr(iaccessReq))
