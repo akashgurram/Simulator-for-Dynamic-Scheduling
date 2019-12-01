@@ -14,6 +14,7 @@ class Instructions:
     def __init__(self, inst):
         self.finalName = " ".join(inst)
         self.instCacheMiss = False
+        self.dataCacheMiss = False
         self.instSpecialFlag = False
         self.dataSpecialFlag = False
         self.wordAddress = 0
@@ -90,10 +91,16 @@ class Pipeline:
         cycle = 0
         newLoop = False
         instructionCache = {0: [], 1: [], 2: [], 3: []}
-        dataCache = {0:[[], []], 1: [[], []]}
-        cacheMissPen = 2 * (functional_units["I-Cache"] + functional_units["Main memory"])
+        dataCache1 = {0: [], 1: []}
+        LRU1 = 0
+        dataCache2 = {0: [], 1: []}
+        LRU2 = 0
+        instcacheMissPen = 2 * (functional_units["I-Cache"] + functional_units["Main memory"])
+        datacacheMissPen = 2 * (functional_units["D-Cache"] + functional_units["Main memory"])
         icacheHit = 0
         iaccessReq = 0
+        dcacheHit = 0
+        daccessReq = 0
         onetimeAssignFlag = True
         while x > 0:
 
@@ -119,7 +126,7 @@ class Pipeline:
                                     inst.instCacheMiss = True
                                     iaccessReq += 1
                                 if inst.instCacheMiss:
-                                    instructionCycles = cacheMissPen
+                                    instructionCycles = instcacheMissPen
                                     onetimeAssignFlag = False
                                 else:
                                     instructionCycles = functional_units["I-Cache"]
@@ -140,13 +147,18 @@ class Pipeline:
                     # DECODE IS BEING DONE AND NOT SOLID
                     elif inst.status == 1:
                         # Checking if the HLT is not the last two halts
-                        if inst.iname == "HLT" and instObjs[instObjs.index(inst)-1].iname != "HLT":
+                        if inst.iname == "HLT" and instObjs[instObjs.index(inst)-1].iname != "HLT" and youcanLoop == True:
                             processor.fBusy = "No"
                             inst.status = 5
                             continue
                         # Checks if the HLT is the last HLT, Then updates the last HLT and Previous HLT
+
+                        elif inst.iname == "HLT" and instObjs[instObjs.index(inst)-1].iname != "HLT" and youcanLoop == False:
+                            processor.fBusy = "No"
+                            inst.decode = cycle
+                            inst.status = 5
+
                         elif inst.iname == "HLT" and instObjs[instObjs.index(inst)-1].iname == "HLT":
-                            instObjs[instObjs.index(inst)-1].decode = cycle-1
                             processor.fBusy = "No"
                             inst.status = 5
                             # x = False
@@ -301,6 +313,68 @@ class Pipeline:
                     # EXECUTION IS BEING DONE HERE . NOT SOLID
                     elif inst.status == 2:
                         if inst.iname in ["L.D", "S.D", "LW", "SW"]:
+
+                            offset = inst.op2.split("(")[0]
+                            actualReg = inst.op2.split("(")[1][:-1]
+                            actualBlockNo = regs[int(actualReg[1:])] + int(offset)
+                            print("actualBlockNo", actualBlockNo)
+                            initialBlockNo = int((regs[int(actualReg[1:])] + int(offset))/16) * 16
+                            setNumber = int(regs[int(actualReg[1:])] + int(offset)/16) % 2
+                            print("setNumber", setNumber)
+                            print("initBlockNo", initialBlockNo)
+                            listtoBePopulated = [initialBlockNo, initialBlockNo+4, initialBlockNo+8, initialBlockNo+12]
+                            print("listtobepop", listtoBePopulated)
+                            dataCacheSet = []
+                            if setNumber == 0:
+                                dataCacheSet, LRU = dataCache1, LRU1
+                            elif setNumber == 1:
+                                dataCacheSet, LRU = dataCache2, LRU2
+                            # Search in only 1 set
+                            if actualBlockNo in dataCacheSet[0] or actualBlockNo in dataCacheSet[1]:
+                                print("Data Cache hit", actualBlockNo, inst.op1)
+                                dcacheHit+=1
+                            else:
+                                inst.dataCacheMiss = True
+
+                                dataCacheSet[LRU] = listtoBePopulated
+                                LRU = LRU ^ 1
+
+                            actualBlockNo += 4
+                            initialBlockNo =  int(actualBlockNo / 16) * 16
+                            setNumber = int(actualBlockNo/ 16) % 2
+                            print("setNumber", setNumber)
+                            print("initBlockNo", initialBlockNo)
+                            listtoBePopulated = [initialBlockNo, initialBlockNo + 4, initialBlockNo + 8,
+                                                 initialBlockNo + 12]
+                            print("listtobepop", listtoBePopulated)
+                            dataCacheSet = []
+                            if setNumber == 0:
+                                dataCacheSet, LRU = dataCache1, LRU1
+                            elif setNumber == 1:
+                                dataCacheSet, LRU = dataCache2, LRU2
+
+                            if actualBlockNo in dataCacheSet[0] or actualBlockNo in dataCacheSet[1]:
+                                print("Data Cache hit1", actualBlockNo)
+                                dcacheHit += 1
+                            else:
+                                inst.dataCacheMiss = True
+
+                                dataCacheSet[LRU] = listtoBePopulated
+                                LRU = LRU ^ 1
+                                print("LRU IS", LRU)
+
+
+
+
+                                print("Cache Miss")
+                                print(dataCache1)
+                                print(dataCache2)
+                                print(dataCacheSet)
+
+
+
+
+
                             if processor.intBusy == "No" and inst.intCount == 1:
                                 processor.intBusy = "Yes"
                                 inst.intCount -= 1
@@ -540,6 +614,7 @@ class Pipeline:
         print(tabulate(table))
         print("I Cache hit", icacheHit)
         print("I Access req", iaccessReq)
+        print("D Cache hit", dcacheHit)
         f = open('result.txt', 'w')
         f.write(tabulate(table, tablefmt="plain"))
         f.write("\n\nTotal number of access requests for instruction cache: " + repr(iaccessReq))

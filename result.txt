@@ -22,7 +22,7 @@ DADDI R4 R4 4     69  70  72  73  N    N    N    N
 DADDI R5 R5 4     70  71  74  75  N    N    N    Y
 DSUB R1 R1 R2     71  72  75  76  N    N    N    N
 BNE R1 R3 GG      72  76          Y    N    N    N
-HLT               76  82          N    N    N    N
+HLT               76  77          N    N    N    N
 HLT               82              N    N    N    N
 
 Total number of access requests for instruction cache: 25

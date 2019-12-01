@@ -22,10 +22,10 @@ def readFiles(path):
         return r
     elif "data.txt" in path:
 
-        j = 100
+        j = 0
         for i in range(len(r)):
-            r[i] = ('0x' + str(j), int(r[i], 2))
-            j += 1
+            r[i] = (256+j, int(r[i], 2))
+            j += 4
         return r
     elif "config.txt" in path:
         functional_units = functionalUnits(r)
