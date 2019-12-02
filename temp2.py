@@ -6,17 +6,21 @@ Created on Mon Nov 18 18:48:44 2019
 """
 
 from utils import readFiles, instParsing, functionalUnits
+import tabulate as tb
 from tabulate import tabulate
+tb.PRESERVE_WHITESPACE = True
 import copy
 
 
 class Instructions:
     def __init__(self, inst):
+        self.finalLoop = "    "
         self.finalName = " ".join(inst)
         self.instCacheMiss = False
         self.dataCacheMiss = False
         self.instSpecialFlag = False
         self.dataSpecialFlag = False
+        self.dataCacheHit = False
         self.wordAddress = 0
         self.iname = inst[0]
         self.op1 = 0
@@ -82,12 +86,13 @@ class Pipeline:
 
         #Appending the loop to the isntructions that require to the finalName to be displayed in the table
         for i in loop:
-            instObjs[i[1]].finalName = i[0] + ": " +instObjs[i[1]].finalName
+            instObjs[i[1]].finalLoop = i[0] + ": "
+
 
         newInstObjs = copy.deepcopy(instObjs)
         # Iterating Over the instruction objects
         processor = Processor()
-        x = 100
+        x = 200
         cycle = 0
         newLoop = False
         instructionCache = {0: [], 1: [], 2: [], 3: []}
@@ -177,7 +182,9 @@ class Pipeline:
                         if processor.dBusy == "No" and inst.iname not in ["BNE", "HLT", "J", "BEQ"]:
                             # Checking if the registers op2 and op3 are not already in the List.
                             if inst.op2 not in fpRegistersList and inst.op3 not in fpRegistersList:
-                                if inst.iname == "ADD.D":
+                                #processor.fBusy = "No"
+                                if inst.iname in ["ADD.D", "SUB.D"]:
+
                                     # Stalling the Inst in the decode stage itself if it's exec stage is not available
                                     # DO THIS FOR THE OTHER INSTRUCTIONS AS WELL
                                     pipelined = functional_units[inst.functionalUnit][1]
@@ -286,7 +293,7 @@ class Pipeline:
                                     newLoop = True
                                     processor.dBusy = "No"
                                     inst.status = 5
-                                    break
+                                    continue
 
                         # Branching case if Instruction name is J
                         elif inst.iname in ["J"]:
@@ -313,74 +320,78 @@ class Pipeline:
                     # EXECUTION IS BEING DONE HERE . NOT SOLID
                     elif inst.status == 2:
                         if inst.iname in ["L.D", "S.D", "LW", "SW"]:
+                            if inst.dataCacheMiss == False:
+                                offset = inst.op2.split("(")[0]
+                                actualReg = inst.op2.split("(")[1][:-1]
+                                actualBlockNo = regs[int(actualReg[1:])] + int(offset)
+                                # initialBlockNo = int((regs[int(actualReg[1:])] + int(offset))/16) * 16
+                                # setNumber = int(regs[int(actualReg[1:])] + int(offset)/16) % 2
+                                initialBlockNo = int(actualBlockNo / 16) * 16
+                                setNumber = int(actualBlockNo/ 16) % 2
+                                daccessReq+=1
+                                listtoBePopulated = [initialBlockNo, initialBlockNo+4, initialBlockNo+8, initialBlockNo+12]
+                                dataCacheSet = []
+                                if setNumber == 0:
+                                    dataCacheSet, LRU = dataCache1, LRU1
+                                elif setNumber == 1:
+                                    dataCacheSet, LRU = dataCache2, LRU2
+                                # Search in only 1 set
 
-                            offset = inst.op2.split("(")[0]
-                            actualReg = inst.op2.split("(")[1][:-1]
-                            actualBlockNo = regs[int(actualReg[1:])] + int(offset)
-                            print("actualBlockNo", actualBlockNo)
-                            initialBlockNo = int((regs[int(actualReg[1:])] + int(offset))/16) * 16
-                            setNumber = int(regs[int(actualReg[1:])] + int(offset)/16) % 2
-                            print("setNumber", setNumber)
-                            print("initBlockNo", initialBlockNo)
-                            listtoBePopulated = [initialBlockNo, initialBlockNo+4, initialBlockNo+8, initialBlockNo+12]
-                            print("listtobepop", listtoBePopulated)
-                            dataCacheSet = []
-                            if setNumber == 0:
-                                dataCacheSet, LRU = dataCache1, LRU1
-                            elif setNumber == 1:
-                                dataCacheSet, LRU = dataCache2, LRU2
-                            # Search in only 1 set
-                            if actualBlockNo in dataCacheSet[0] or actualBlockNo in dataCacheSet[1]:
-                                print("Data Cache hit", actualBlockNo, inst.op1)
-                                dcacheHit+=1
-                            else:
-                                inst.dataCacheMiss = True
+                                if actualBlockNo in dataCacheSet[0] or actualBlockNo in dataCacheSet[1]:
 
-                                dataCacheSet[LRU] = listtoBePopulated
-                                LRU = LRU ^ 1
+                                    dcacheHit+=1
+                                    inst.dataCacheMiss = True
+                                else:
 
-                            actualBlockNo += 4
-                            initialBlockNo =  int(actualBlockNo / 16) * 16
-                            setNumber = int(actualBlockNo/ 16) % 2
-                            print("setNumber", setNumber)
-                            print("initBlockNo", initialBlockNo)
-                            listtoBePopulated = [initialBlockNo, initialBlockNo + 4, initialBlockNo + 8,
-                                                 initialBlockNo + 12]
-                            print("listtobepop", listtoBePopulated)
-                            dataCacheSet = []
-                            if setNumber == 0:
-                                dataCacheSet, LRU = dataCache1, LRU1
-                            elif setNumber == 1:
-                                dataCacheSet, LRU = dataCache2, LRU2
-
-                            if actualBlockNo in dataCacheSet[0] or actualBlockNo in dataCacheSet[1]:
-                                print("Data Cache hit1", actualBlockNo)
-                                dcacheHit += 1
-                            else:
-                                inst.dataCacheMiss = True
-
-                                dataCacheSet[LRU] = listtoBePopulated
-                                LRU = LRU ^ 1
-                                print("LRU IS", LRU)
+                                    inst.memCount += datacacheMissPen - 1
 
 
+                                    dataCacheSet[LRU] = listtoBePopulated
+                                    LRU = LRU ^ 1
+                                    print("Cache Miss")
+                                    print(LRU)
+                                    print(setNumber,actualBlockNo)
+                                    print("datacache1",dataCache1)
+                                    print("datacache2", dataCache2)
+
+                                actualBlockNo += 4
+                                initialBlockNo = int(actualBlockNo / 16) * 16
+                                setNumber = int(actualBlockNo/ 16) % 2
+                                daccessReq += 1
+                                print("SETNNO", setNumber, inst.iname, inst.op1,actualBlockNo)
+                                listtoBePopulated = [initialBlockNo, initialBlockNo + 4, initialBlockNo + 8,
+                                                     initialBlockNo + 12]
+                                dataCacheSet = []
+                                if setNumber == 0:
+                                    dataCacheSet, LRU = dataCache1, LRU1
+                                elif setNumber == 1:
+                                    dataCacheSet, LRU = dataCache2, LRU2
+                                if actualBlockNo in dataCacheSet[0] or actualBlockNo in dataCacheSet[1]:
+
+                                    dcacheHit += 1
+                                    inst.dataCacheMiss = True
+                                else:
+
+                                    inst.memCount += datacacheMissPen - 1
+                                    dataCacheSet[LRU] = listtoBePopulated
+                                    LRU = LRU ^ 1
 
 
-                                print("Cache Miss")
-                                print(dataCache1)
-                                print(dataCache2)
-                                print(dataCacheSet)
+
 
 
 
 
 
                             if processor.intBusy == "No" and inst.intCount == 1:
+
                                 processor.intBusy = "Yes"
                                 inst.intCount -= 1
                                 processor.dBusy = "No"
 
                             else:
+
+
                                 if processor.memBusy[0] == "No" or processor.memBusy[1] == instObjs.index(inst):
                                     if processor.memBusy[0] == "No":
                                         processor.intBusy = "No"
@@ -406,10 +417,12 @@ class Pipeline:
                                     processor.addBusy = "Yes"
                                 else:
                                     processor.dBusy = "No"
+                                print("exec CYCLE", inst.execCycle, cycle)
                                 inst.execCycle -= 1
                                 if inst.execCycle == 0:
                                     processor.addBusy = "No"
                                     inst.exec = cycle
+                                    print("ADD CYCLE",cycle)
                                     inst.status = 3
                             else:
                                 if processor.addBusy == "No":
@@ -580,7 +593,7 @@ class Pipeline:
                 instObjs.pop()
                 instObjs += newInstructions
                 newLoop = False
-                cycle -= 1
+                #cycle -= 1
             x -= 1
 
         for i in instObjs:
@@ -592,22 +605,31 @@ class Pipeline:
         #     instObjs[i].finalOutput.append(" ".join(instructions[i]))
 
         for inst in instObjs:
+            inst.finalOutput.append(inst.finalLoop)
             inst.finalOutput.append(inst.finalName)
+            inst.finalOutput.append("    ")
             #inst.finalOutput.append(inst.iname+","+str(inst.op1)+","+str(inst.op2)+","+str(inst.op3))
             inst.finalOutput.append(inst.fetch)
+            inst.finalOutput.append("    ")
             inst.finalOutput.append(inst.decode)
+            inst.finalOutput.append("    ")
             inst.finalOutput.append(inst.exec)
+            inst.finalOutput.append("    ")
             inst.finalOutput.append(inst.write)
+            inst.finalOutput.append("    ")
             inst.finalOutput.append(inst.raw)
+            inst.finalOutput.append("    ")
             inst.finalOutput.append(inst.war)
+            inst.finalOutput.append("    ")
             inst.finalOutput.append(inst.waw)
+            inst.finalOutput.append("    ")
             inst.finalOutput.append(inst.struct)
 
         # REPLACING ALL THE ZERO's with " " in the output file
         for inst in instObjs:
             inst.finalOutput = [" " if x == 0 else x for x in inst.finalOutput]
         table = []
-        headers = ["Instruction", "FT", "ID", "EX", "WB", "RAW", "WAR", "WAW", "Struct"]
+        headers = ["", "Instruction", "    ", "FT", "    ", "ID", "    ", "EX", "    ", "WB", "    ", "RAW", "    ", "WAR", "    ", "WAW", "    ", "Struct"]
         table.append(headers)
         for inst in instObjs:
             table.append(inst.finalOutput)
@@ -615,12 +637,13 @@ class Pipeline:
         print("I Cache hit", icacheHit)
         print("I Access req", iaccessReq)
         print("D Cache hit", dcacheHit)
+        print("D Access req", daccessReq)
         f = open('result.txt', 'w')
         f.write(tabulate(table, tablefmt="plain"))
         f.write("\n\nTotal number of access requests for instruction cache: " + repr(iaccessReq))
         f.write("\n\nNumber of instruction cache hits: " + repr(icacheHit))
-        f.write("\n\nTotal number of access requests for data cache: ")
-        f.write("\n\nNumber of data cache hits: ")
+        f.write("\n\nTotal number of access requests for data cache: " + repr(dcacheHit))
+        f.write("\n\nNumber of data cache hits: " + repr(daccessReq))
         f.close()
 
     def calculate(self, inst, op1, op2, op3):
