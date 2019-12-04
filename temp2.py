@@ -95,6 +95,8 @@ class Pipeline:
         x = 200
         cycle = 0
         newLoop = False
+        youcanLoop = False
+        cacheBusBusy = False
         instructionCache = {0: [], 1: [], 2: [], 3: []}
         dataCache1 = {0: [], 1: []}
         LRU1 = 0
@@ -151,6 +153,8 @@ class Pipeline:
 
                     # DECODE IS BEING DONE AND NOT SOLID
                     elif inst.status == 1:
+                        if (inst.iname == "S.D" or inst.iname == "SW"):
+                            processor.fBusy = "No"
                         # Checking if the HLT is not the last two halts
                         if inst.iname == "HLT" and instObjs[instObjs.index(inst)-1].iname != "HLT" and youcanLoop == True:
                             processor.fBusy = "No"
@@ -249,6 +253,8 @@ class Pipeline:
                                     processor.dBusy = "Yes"
                                     processor.fBusy = "No"
                                     inst.status = 2
+                                    if(inst.iname == "S.D" or inst.iname == "SW"):
+                                        inst.waw = "N"
 
                             # DO IT FOR OP3 AS WELL - Done
                             elif (inst.op2 in fpRegistersList and fpInstructionList[fpRegistersList.index(inst.op2)] == instObjs.index(inst))\
@@ -289,7 +295,7 @@ class Pipeline:
                                     for p in loop:
                                         if p[0] == inst.op3:
                                             z = p[1]
-                                    newInstructions = newInstObjs[z:]
+                                    newInstructions = copy.deepcopy(newInstObjs[z:])
                                     newLoop = True
                                     processor.dBusy = "No"
                                     inst.status = 5
@@ -319,7 +325,7 @@ class Pipeline:
 
                     # EXECUTION IS BEING DONE HERE . NOT SOLID
                     elif inst.status == 2:
-                        if inst.iname in ["L.D", "S.D", "LW", "SW"]:
+                        if inst.iname in ["L.D"]:
                             if inst.dataCacheMiss == False:
                                 offset = inst.op2.split("(")[0]
                                 actualReg = inst.op2.split("(")[1][:-1]
@@ -348,17 +354,11 @@ class Pipeline:
 
                                     dataCacheSet[LRU] = listtoBePopulated
                                     LRU = LRU ^ 1
-                                    print("Cache Miss")
-                                    print(LRU)
-                                    print(setNumber,actualBlockNo)
-                                    print("datacache1",dataCache1)
-                                    print("datacache2", dataCache2)
 
                                 actualBlockNo += 4
                                 initialBlockNo = int(actualBlockNo / 16) * 16
                                 setNumber = int(actualBlockNo/ 16) % 2
                                 daccessReq += 1
-                                print("SETNNO", setNumber, inst.iname, inst.op1,actualBlockNo)
                                 listtoBePopulated = [initialBlockNo, initialBlockNo + 4, initialBlockNo + 8,
                                                      initialBlockNo + 12]
                                 dataCacheSet = []
@@ -406,7 +406,194 @@ class Pipeline:
                                 else:
                                  inst.struct = "Y"
 
+                        if inst.iname in ["S.D"]:
+                            if inst.dataCacheMiss == False:
+                                offset = inst.op2.split("(")[0]
+                                actualReg = inst.op2.split("(")[1][:-1]
+                                actualBlockNo = regs[int(actualReg[1:])] + int(offset)
+                                # initialBlockNo = int((regs[int(actualReg[1:])] + int(offset))/16) * 16
+                                # setNumber = int(regs[int(actualReg[1:])] + int(offset)/16) % 2
+                                initialBlockNo = int(actualBlockNo / 16) * 16
+                                setNumber = int(actualBlockNo/ 16) % 2
+                                daccessReq+=1
+                                listtoBePopulated = [initialBlockNo, initialBlockNo+4, initialBlockNo+8, initialBlockNo+12]
+                                dataCacheSet = []
+                                if setNumber == 0:
+                                    dataCacheSet, LRU = dataCache1, LRU1
+                                elif setNumber == 1:
+                                    dataCacheSet, LRU = dataCache2, LRU2
+                                # Search in only 1 set
 
+                                if actualBlockNo in dataCacheSet[0] or actualBlockNo in dataCacheSet[1]:
+
+                                    dcacheHit+=1
+                                    inst.dataCacheMiss = True
+                                else:
+
+                                    inst.memCount += datacacheMissPen
+
+
+                                    dataCacheSet[LRU] = listtoBePopulated
+                                    LRU = LRU ^ 1
+
+                                actualBlockNo += 4
+                                initialBlockNo = int(actualBlockNo / 16) * 16
+                                setNumber = int(actualBlockNo/ 16) % 2
+                                daccessReq += 1
+                                listtoBePopulated = [initialBlockNo, initialBlockNo + 4, initialBlockNo + 8,
+                                                     initialBlockNo + 12]
+                                dataCacheSet = []
+                                if setNumber == 0:
+                                    dataCacheSet, LRU = dataCache1, LRU1
+                                elif setNumber == 1:
+                                    dataCacheSet, LRU = dataCache2, LRU2
+                                if actualBlockNo in dataCacheSet[0] or actualBlockNo in dataCacheSet[1]:
+
+                                    dcacheHit += 1
+                                    inst.dataCacheMiss = True
+                                else:
+
+                                    inst.memCount += datacacheMissPen
+                                    dataCacheSet[LRU] = listtoBePopulated
+                                    LRU = LRU ^ 1
+
+
+
+
+
+
+
+
+                            if processor.intBusy == "No" and inst.intCount == 1:
+
+                                processor.intBusy = "Yes"
+                                inst.intCount -= 1
+                                processor.dBusy = "No"
+
+                            else:
+
+
+                                if processor.memBusy[0] == "No" or processor.memBusy[1] == instObjs.index(inst):
+                                    if processor.memBusy[0] == "No":
+                                        processor.intBusy = "No"
+                                    processor.memBusy[0] = "Yes"
+                                    processor.memBusy[1] = instObjs.index(inst)
+                                    inst.memCount -= 1
+
+                                    if(inst.memCount == 0):
+                                        inst.exec = cycle
+                                        inst.status = 3
+
+                                else:
+                                 inst.struct = "Y"
+
+                        if inst.iname in ["LW"]:
+                            if inst.dataCacheMiss == False:
+                                offset = inst.op2.split("(")[0]
+                                actualReg = inst.op2.split("(")[1][:-1]
+                                actualBlockNo = regs[int(actualReg[1:])] + int(offset)
+                                # initialBlockNo = int((regs[int(actualReg[1:])] + int(offset))/16) * 16
+                                # setNumber = int(regs[int(actualReg[1:])] + int(offset)/16) % 2
+                                initialBlockNo = int(actualBlockNo / 16) * 16
+                                setNumber = int(actualBlockNo/ 16) % 2
+                                daccessReq+=1
+                                listtoBePopulated = [initialBlockNo, initialBlockNo+4, initialBlockNo+8, initialBlockNo+12]
+                                dataCacheSet = []
+                                if setNumber == 0:
+                                    dataCacheSet, LRU = dataCache1, LRU1
+                                elif setNumber == 1:
+                                    dataCacheSet, LRU = dataCache2, LRU2
+                                # Search in only 1 set
+
+                                if actualBlockNo in dataCacheSet[0] or actualBlockNo in dataCacheSet[1]:
+
+                                    dcacheHit+=1
+                                    inst.dataCacheMiss = True
+                                else:
+
+                                    inst.memCount += datacacheMissPen - 1
+
+
+                                    dataCacheSet[LRU] = listtoBePopulated
+                                    LRU = LRU ^ 1
+
+
+                            if processor.intBusy == "No" and inst.intCount == 1:
+
+                                processor.intBusy = "Yes"
+                                inst.intCount -= 1
+                                processor.dBusy = "No"
+
+                            else:
+
+
+                                if processor.memBusy[0] == "No" or processor.memBusy[1] == instObjs.index(inst):
+                                    if processor.memBusy[0] == "No":
+                                        processor.intBusy = "No"
+                                    processor.memBusy[0] = "Yes"
+                                    processor.memBusy[1] = instObjs.index(inst)
+                                    inst.memCount -= 1
+
+                                    if(inst.memCount == 0):
+                                        inst.exec = cycle
+                                        inst.status = 3
+
+                                else:
+                                 inst.struct = "Y"
+
+                        if inst.iname in ["SW"]:
+                            if inst.dataCacheMiss == False:
+                                offset = inst.op2.split("(")[0]
+                                actualReg = inst.op2.split("(")[1][:-1]
+                                actualBlockNo = regs[int(actualReg[1:])] + int(offset)
+                                # initialBlockNo = int((regs[int(actualReg[1:])] + int(offset))/16) * 16
+                                # setNumber = int(regs[int(actualReg[1:])] + int(offset)/16) % 2
+                                initialBlockNo = int(actualBlockNo / 16) * 16
+                                setNumber = int(actualBlockNo/ 16) % 2
+                                daccessReq+=1
+                                listtoBePopulated = [initialBlockNo, initialBlockNo+4, initialBlockNo+8, initialBlockNo+12]
+                                dataCacheSet = []
+                                if setNumber == 0:
+                                    dataCacheSet, LRU = dataCache1, LRU1
+                                elif setNumber == 1:
+                                    dataCacheSet, LRU = dataCache2, LRU2
+                                # Search in only 1 set
+
+                                if actualBlockNo in dataCacheSet[0] or actualBlockNo in dataCacheSet[1]:
+
+                                    dcacheHit+=1
+                                    inst.dataCacheMiss = True
+                                else:
+
+                                    inst.memCount += datacacheMissPen - 1
+
+
+                                    dataCacheSet[LRU] = listtoBePopulated
+                                    LRU = LRU ^ 1
+
+
+                            if processor.intBusy == "No" and inst.intCount == 1:
+
+                                processor.intBusy = "Yes"
+                                inst.intCount -= 1
+                                processor.dBusy = "No"
+
+                            else:
+
+
+                                if processor.memBusy[0] == "No" or processor.memBusy[1] == instObjs.index(inst):
+                                    if processor.memBusy[0] == "No":
+                                        processor.intBusy = "No"
+                                    processor.memBusy[0] = "Yes"
+                                    processor.memBusy[1] = instObjs.index(inst)
+                                    inst.memCount -= 1
+
+                                    if(inst.memCount == 0):
+                                        inst.exec = cycle
+                                        inst.status = 3
+
+                                else:
+                                 inst.struct = "Y"
 
                         ## YET TO ADD THE HAZARDS BOTH STRUCT  and make the pipelined auto instead of manual
                         elif inst.iname == "ADD.D" or inst.iname == "SUB.D":
@@ -417,19 +604,16 @@ class Pipeline:
                                     processor.addBusy = "Yes"
                                 else:
                                     processor.dBusy = "No"
-                                print("exec CYCLE", inst.execCycle, cycle)
                                 inst.execCycle -= 1
                                 if inst.execCycle == 0:
                                     processor.addBusy = "No"
                                     inst.exec = cycle
-                                    print("ADD CYCLE",cycle)
                                     inst.status = 3
                             else:
                                 if processor.addBusy == "No":
                                     #CHANGE THIS FOR MUL AND DIV AS WELL
                                     #inst.decode = cycle-1
                                     processor.dBusy = "No"
-                                    print("HHH", cycle, inst.op1)
                                     processor.addBusy = "Yes"
                                     inst.execCycle -= 1
                                     # This code below will be executed if the clock cyles it takes is only 1
@@ -443,7 +627,6 @@ class Pipeline:
                                     if inst.execCycle != functional_units[inst.functionalUnit][0]:
                                         inst.execCycle -= 1
                                         if inst.execCycle == 0:
-                                            print("www", cycle, inst.op1)
                                             processor.addBusy = "No"
                                             inst.exec = cycle
                                             inst.status = 3
@@ -514,10 +697,11 @@ class Pipeline:
 
 
                         elif inst.iname in ["DADD", "DADDI", "DSUB", "DSUBI", "AND", "ANDI", "OR", "ORI"]:
+                            processor.dBusy = "No"
                             if processor.intBusy == "No" and inst.intCount == 1:
                                 processor.intBusy = "Yes"
                                 inst.intCount -= 1
-                                processor.dBusy = "No"
+                                #processor.dBusy = "No"
 
                             elif processor.memBusy[0] == "No":
                                 if inst.memCount == 1:
@@ -528,6 +712,9 @@ class Pipeline:
 
                                 inst.exec = cycle
                                 inst.status = 3
+
+                            else:
+                                inst.struct = "Y"
 
 
 
@@ -594,21 +781,13 @@ class Pipeline:
                 instObjs += newInstructions
                 newLoop = False
                 #cycle -= 1
+            else:
+                processor.dBusy = "No"
             x -= 1
-
-        for i in instObjs:
-            print(i.iname, i.fetch, i.decode, i.exec, i.write, i.raw, i.struct)
-
-        print(regs)
-
-        # for i in range(len(instructions)):
-        #     instObjs[i].finalOutput.append(" ".join(instructions[i]))
-
         for inst in instObjs:
             inst.finalOutput.append(inst.finalLoop)
             inst.finalOutput.append(inst.finalName)
             inst.finalOutput.append("    ")
-            #inst.finalOutput.append(inst.iname+","+str(inst.op1)+","+str(inst.op2)+","+str(inst.op3))
             inst.finalOutput.append(inst.fetch)
             inst.finalOutput.append("    ")
             inst.finalOutput.append(inst.decode)
@@ -645,6 +824,7 @@ class Pipeline:
         f.write("\n\nTotal number of access requests for data cache: " + repr(dcacheHit))
         f.write("\n\nNumber of data cache hits: " + repr(daccessReq))
         f.close()
+
 
     def calculate(self, inst, op1, op2, op3):
         if inst == "DADD":
