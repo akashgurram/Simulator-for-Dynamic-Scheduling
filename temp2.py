@@ -53,7 +53,7 @@ class Instructions:
         if self.iname in ["L.D", "S.D", "LW", "SW"]:
             self.intCount = 1
             self.functionalUnit = "Main memory"
-            self.memCount = int(functional_units[self.functionalUnit])
+            self.memCount = 0
 
         elif self.iname == "ADD.D" or self.iname == "SUB.D":
             self.functionalUnit = "FP adder"
@@ -75,6 +75,8 @@ class Instructions:
 class Pipeline:
     def __init__(self, instructions):
 
+        RAND1 = False
+        RAND2 = False
         fpRegistersList = []
         fpInstructionList = []
         instObjs = []
@@ -92,7 +94,7 @@ class Pipeline:
         newInstObjs = copy.deepcopy(instObjs)
         # Iterating Over the instruction objects
         processor = Processor()
-        x = 200
+        x = 1000
         cycle = 0
         newLoop = False
         youcanLoop = False
@@ -200,9 +202,7 @@ class Pipeline:
 
                         # Checks THE WAW Hazard
                         if inst.iname not in ["BNE", "HLT", "J", "BEQ", "S.D"] and inst.op1 in fpRegistersList and fpInstructionList[fpRegistersList.index(inst.op1)] != instObjs.index(inst):
-                            print("JJJ", inst.iname, inst.op1)
                             inst.waw = "Y"
-                            print(inst.iname)
                             continue
 
                         # Actually diving in to the decode stage for all the other Instructions
@@ -283,12 +283,15 @@ class Pipeline:
                             # DO IT FOR OP3 AS WELL - Done
                             elif (inst.op2 in fpRegistersList and fpInstructionList[fpRegistersList.index(inst.op2)] == instObjs.index(inst))\
                                 or (inst.op3 in fpRegistersList and fpInstructionList[fpRegistersList.index(inst.op3)] == instObjs.index(inst)):
-                                if instObjs[instObjs.index(inst) - 1].decode - inst.fetch > 0:
-                                    inst.fetch = instObjs[instObjs.index(inst) - 1].decode
-                                processor.dBusy = "Yes"
-                                processor.fBusy = ["No", None]
-                                inst.decode = cycle
-                                inst.status = 2
+                                if RAND1 == True or processor.intBusy == "No":
+                                    if instObjs[instObjs.index(inst) - 1].decode - inst.fetch > 0:
+                                        inst.fetch = instObjs[instObjs.index(inst) - 1].decode
+                                    processor.dBusy = "Yes"
+                                    processor.fBusy = ["No", None]
+                                    inst.decode = cycle
+                                    inst.status = 2
+                                else:
+                                    continue
                             # else:
                             #     inst.raw = "Y"
                             else:
@@ -356,7 +359,7 @@ class Pipeline:
 
 
 
-                    # EXECUTION IS BEING DONE HERE . NOT SOLID
+                    # EXECUTION IS BEING DONE HERE. SOLID
                     elif inst.status == 2:
                         if inst.iname in ["L.D"]:
                             if inst.dataCacheMiss == False:
@@ -379,10 +382,11 @@ class Pipeline:
                                 if actualBlockNo in dataCacheSet[0] or actualBlockNo in dataCacheSet[1]:
 
                                     dcacheHit+=1
+                                    inst.memCount += functional_units["D-Cache"]
                                     inst.dataCacheMiss = True
                                 else:
 
-                                    inst.memCount += datacacheMissPen - 1
+                                    inst.memCount += datacacheMissPen
 
 
                                     dataCacheSet[LRU] = listtoBePopulated
@@ -402,25 +406,26 @@ class Pipeline:
                                 if actualBlockNo in dataCacheSet[0] or actualBlockNo in dataCacheSet[1]:
 
                                     dcacheHit += 1
+                                    inst.memCount += functional_units["D-Cache"]
                                     inst.dataCacheMiss = True
                                 else:
 
-                                    inst.memCount += datacacheMissPen - 1
+                                    inst.memCount += datacacheMissPen
                                     dataCacheSet[LRU] = listtoBePopulated
                                     LRU = LRU ^ 1
 
 
-
-
-
-
-
-
                             if processor.intBusy == "No" and inst.intCount == 1:
+                                if RAND2 == True or processor.memBusy[0] == "No":
 
-                                processor.intBusy = "Yes"
-                                inst.intCount -= 1
-                                processor.dBusy = "No"
+
+                                    processor.intBusy = "Yes"
+                                    inst.intCount -= 1
+                                    processor.dBusy = "No"
+                                    RAND1 = True
+                                else:
+                                    inst.struct = "Y"
+                                    continue
 
                             else:
 
@@ -428,11 +433,13 @@ class Pipeline:
                                 if processor.memBusy[0] == "No" or processor.memBusy[1] == instObjs.index(inst):
                                     if processor.memBusy[0] == "No":
                                         processor.intBusy = "No"
+                                        RAND1 = False
                                     processor.memBusy[0] = "Yes"
                                     processor.memBusy[1] = instObjs.index(inst)
                                     inst.memCount -= 1
 
                                     if(inst.memCount == 0):
+                                        RAND2 = True
                                         inst.exec = cycle
                                         inst.status = 3
 
@@ -460,10 +467,11 @@ class Pipeline:
                                 if actualBlockNo in dataCacheSet[0] or actualBlockNo in dataCacheSet[1]:
 
                                     dcacheHit+=1
+                                    inst.memCount += functional_units["D-Cache"]
                                     inst.dataCacheMiss = True
                                 else:
 
-                                    inst.memCount += datacacheMissPen
+                                    inst.memCount += datacacheMissPen+1
 
 
                                     dataCacheSet[LRU] = listtoBePopulated
@@ -483,42 +491,42 @@ class Pipeline:
                                 if actualBlockNo in dataCacheSet[0] or actualBlockNo in dataCacheSet[1]:
 
                                     dcacheHit += 1
+                                    inst.memCount += functional_units["D-Cache"]
                                     inst.dataCacheMiss = True
                                 else:
 
-                                    inst.memCount += datacacheMissPen
+                                    inst.memCount += datacacheMissPen +1
                                     dataCacheSet[LRU] = listtoBePopulated
                                     LRU = LRU ^ 1
 
-
-
-
-
-
-
-
                             if processor.intBusy == "No" and inst.intCount == 1:
+                                if RAND2 == True or processor.memBusy[0] == "No":
 
-                                processor.intBusy = "Yes"
-                                inst.intCount -= 1
-                                processor.dBusy = "No"
+                                    processor.intBusy = "Yes"
+                                    inst.intCount -= 1
+                                    processor.dBusy = "No"
+                                    RAND1 = True
+                                else:
+                                    inst.raw = "Y"
+                                    continue
 
                             else:
-
 
                                 if processor.memBusy[0] == "No" or processor.memBusy[1] == instObjs.index(inst):
                                     if processor.memBusy[0] == "No":
                                         processor.intBusy = "No"
+                                        RAND1 = False
                                     processor.memBusy[0] = "Yes"
                                     processor.memBusy[1] = instObjs.index(inst)
                                     inst.memCount -= 1
 
-                                    if(inst.memCount == 0):
+                                    if (inst.memCount == 0):
+                                        RAND2 = True
                                         inst.exec = cycle
                                         inst.status = 3
 
                                 else:
-                                 inst.struct = "Y"
+                                    inst.struct = "Y"
 
                         if inst.iname in ["LW"]:
                             if inst.dataCacheMiss == False:
@@ -541,38 +549,44 @@ class Pipeline:
                                 if actualBlockNo in dataCacheSet[0] or actualBlockNo in dataCacheSet[1]:
 
                                     dcacheHit+=1
+                                    inst.memCount += functional_units["D-Cache"]
                                     inst.dataCacheMiss = True
                                 else:
 
-                                    inst.memCount += datacacheMissPen - 1
+                                    inst.memCount += datacacheMissPen
 
 
                                     dataCacheSet[LRU] = listtoBePopulated
                                     LRU = LRU ^ 1
 
-
                             if processor.intBusy == "No" and inst.intCount == 1:
+                                if RAND2 == True or processor.memBusy[0] == "No":
 
-                                processor.intBusy = "Yes"
-                                inst.intCount -= 1
-                                processor.dBusy = "No"
+                                    processor.intBusy = "Yes"
+                                    inst.intCount -= 1
+                                    processor.dBusy = "No"
+                                    RAND1 = True
+                                else:
+                                    inst.struct = "Y"
+                                    continue
 
                             else:
-
 
                                 if processor.memBusy[0] == "No" or processor.memBusy[1] == instObjs.index(inst):
                                     if processor.memBusy[0] == "No":
                                         processor.intBusy = "No"
+                                        RAND1 = False
                                     processor.memBusy[0] = "Yes"
                                     processor.memBusy[1] = instObjs.index(inst)
                                     inst.memCount -= 1
 
-                                    if(inst.memCount == 0):
+                                    if (inst.memCount == 0):
+                                        RAND2 = True
                                         inst.exec = cycle
                                         inst.status = 3
 
                                 else:
-                                 inst.struct = "Y"
+                                    inst.struct = "Y"
 
                         if inst.iname in ["SW"]:
                             if inst.dataCacheMiss == False:
@@ -595,38 +609,44 @@ class Pipeline:
                                 if actualBlockNo in dataCacheSet[0] or actualBlockNo in dataCacheSet[1]:
 
                                     dcacheHit+=1
+                                    inst.memCount += functional_units["D-Cache"]
                                     inst.dataCacheMiss = True
                                 else:
 
-                                    inst.memCount += datacacheMissPen - 1
+                                    inst.memCount += datacacheMissPen +1
 
 
                                     dataCacheSet[LRU] = listtoBePopulated
                                     LRU = LRU ^ 1
 
-
                             if processor.intBusy == "No" and inst.intCount == 1:
+                                if RAND2 == True or processor.memBusy[0] == "No":
 
-                                processor.intBusy = "Yes"
-                                inst.intCount -= 1
-                                processor.dBusy = "No"
+                                    processor.intBusy = "Yes"
+                                    inst.intCount -= 1
+                                    processor.dBusy = "No"
+                                    RAND1 = True
+                                else:
+                                    inst.struct = "Y"
+                                    continue
 
                             else:
-
 
                                 if processor.memBusy[0] == "No" or processor.memBusy[1] == instObjs.index(inst):
                                     if processor.memBusy[0] == "No":
                                         processor.intBusy = "No"
+                                        RAND1 = False
                                     processor.memBusy[0] = "Yes"
                                     processor.memBusy[1] = instObjs.index(inst)
                                     inst.memCount -= 1
 
-                                    if(inst.memCount == 0):
+                                    if (inst.memCount == 0):
+                                        RAND2 = True
                                         inst.exec = cycle
                                         inst.status = 3
 
                                 else:
-                                 inst.struct = "Y"
+                                    inst.struct = "Y"
 
                         ## YET TO ADD THE HAZARDS BOTH STRUCT  and make the pipelined auto instead of manual
                         elif inst.iname == "ADD.D" or inst.iname == "SUB.D":
@@ -731,23 +751,50 @@ class Pipeline:
 
                         elif inst.iname in ["DADD", "DADDI", "DSUB", "DSUBI", "AND", "ANDI", "OR", "ORI"]:
                             #processor.dBusy = "No"
+
                             if processor.intBusy == "No" and inst.intCount == 1:
-                                processor.intBusy = "Yes"
-                                inst.intCount -= 1
-                                processor.dBusy = "No"
+                                if RAND2 == True or processor.memBusy[0] == "No":
 
-                            elif processor.memBusy[0] == "No":
-                                if inst.memCount == 1:
-                                    inst.memCount = 0
-                                    processor.intBusy = "No"
-                                    processor.memBusy[0] = "Yes"
-                                    processor.memBusy[1] = instObjs.index(inst)
-
-                                inst.exec = cycle
-                                inst.status = 3
+                                    processor.intBusy = "Yes"
+                                    inst.intCount -= 1
+                                    processor.dBusy = "No"
+                                    RAND1 = True
+                                else:
+                                    inst.struct = "Y"
+                                    continue
 
                             else:
-                                inst.struct = "Y"
+
+                                if processor.memBusy[0] == "No":
+                                    if inst.memCount == 1:
+                                        inst.memCount = 0
+                                        RAND2 = True
+                                        processor.intBusy = "No"
+                                        RAND1 = False
+                                        processor.memBusy[0] = "Yes"
+                                        processor.memBusy[1] = instObjs.index(inst)
+
+                                    inst.exec = cycle
+                                    inst.status = 3
+
+                                else:
+                                    inst.struct = "Y"
+                                # if processor.memBusy[0] == "No" or processor.memBusy[1] == instObjs.index(inst):
+                                #     if processor.memBusy[0] == "No":
+                                #         processor.intBusy = "No"
+                                #         RAND1 = False
+                                #     processor.memBusy[0] = "Yes"
+                                #     processor.memBusy[1] = instObjs.index(inst)
+                                #     inst.memCount -= 1
+                                #
+                                #     if (inst.memCount == 0):
+                                #         RAND2 = True
+                                #         inst.exec = cycle
+                                #         inst.status = 3
+                                #
+                                # else:
+                                #     inst.struct = "Y"
+
 
 
 
@@ -756,8 +803,15 @@ class Pipeline:
 
                         if processor.wbBusy[0] == "No":
                             if inst.iname in ["L.D", "S.D", "LW", "SW"]:
-                                processor.memBusy[0] = "No"
-                                processor.memBusy[1] = None
+                                if RAND2 == True:
+
+                                    processor.memBusy[0] = "No"
+                                    processor.memBusy[1] = None
+
+
+                                    RAND2 = False
+                                else:
+                                    continue
 
 
                             elif inst.iname == "ADD.D" or inst.iname == "SUB.D":
@@ -770,16 +824,22 @@ class Pipeline:
 
                             elif inst.iname in ["DADD", "DADDI", "DSUB", "DSUBI", "AND", "ANDI", "OR", "ORI"]:
                                 #processor.intMemBusy = "No"
-                                processor.memBusy[0] = "No"
-                                processor.memBusy[1] = None
-                                self.calculate(inst.iname, inst.op1, inst.op2, inst.op3)
-                            inst.status = 4
-                            inst.write = cycle
+                                if RAND2 == True:
+                                    RAND2 = False
+                                    processor.memBusy[0] = "No"
+                                    processor.memBusy[1] = None
+                                    self.calculate(inst.iname, inst.op1, inst.op2, inst.op3)
+                                    inst.status = 4
+                                    inst.write = cycle
+                                else:
+                                    continue
                             if inst.iname not in ["S.D", "SW"]:
                                 index1 = fpRegistersList.index(inst.op1)
                                 fpRegistersList.remove(fpRegistersList[index1])
                                 fpInstructionList.remove(fpInstructionList[index1])
                             processor.wbBusy = ["Yes", cycle]
+                            inst.status = 4
+                            inst.write = cycle
 
                         else:
 
@@ -806,7 +866,6 @@ class Pipeline:
                         if cycle > processor.wbBusy[1]:
                             processor.wbBusy = ["No", 0]
                         inst.status = 5
-
             if newLoop:
                 #youcanLoop = False
                 processor.fBusy = ["No", None]
@@ -842,7 +901,10 @@ class Pipeline:
         # REPLACING ALL THE ZERO's with " " in the output file
         for inst in instObjs:
             inst.finalOutput = [" " if x == 0 else x for x in inst.finalOutput]
-        instObjs[-1].finalOutput = [" " if x == "N" else x for x in instObjs[-1].finalOutput]
+        # instObjs[-1].finalOutput = [" " if x == "N" else x for x in instObjs[-1].finalOutput]
+        for inst in instObjs:
+            if inst.iname == "HLT" and inst.decode == 0:
+                inst.finalOutput = [" " if x == "N" else x for x in inst.finalOutput]
         table = []
         headers = ["", "Instruction", "    ", "FT", "    ", "ID", "    ", "EX", "    ", "WB", "    ", "RAW", "    ", "WAR", "    ", "WAW", "    ", "Struct"]
         table.append(headers)
@@ -857,8 +919,8 @@ class Pipeline:
         f.write(tabulate(table, tablefmt="plain"))
         f.write("\n\nTotal number of access requests for instruction cache: " + repr(iaccessReq))
         f.write("\n\nNumber of instruction cache hits: " + repr(icacheHit))
-        f.write("\n\nTotal number of access requests for data cache: " + repr(dcacheHit))
-        f.write("\n\nNumber of data cache hits: " + repr(daccessReq))
+        f.write("\n\nTotal number of access requests for data cache: " + repr(daccessReq))
+        f.write("\n\nNumber of data cache hits: " + repr(dcacheHit))
         f.close()
 
 
