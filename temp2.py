@@ -119,8 +119,13 @@ class Pipeline:
 
 
                     if inst.status == 0:
-
-                        if processor.fBusy == "No" or inst.instSpecialFlag == True :
+                        #
+                        # if inst.iname == "HLT" and instObjs[instObjs.index(inst) - 1].iname != "HLT" and youcanLoop == True:
+                        #     processor.fBusy = ["No", None]
+                        #     inst.fetch = cycle
+                        #     inst.status = 5
+                        #     continue
+                        if processor.fBusy[0] == "No" or inst.instSpecialFlag == True :
                             blockNo = int(inst.wordAddress / 4) % 4
 
 
@@ -140,11 +145,12 @@ class Pipeline:
                                     onetimeAssignFlag = False
 
 
-                            processor.fBusy = "Yes"
+                            processor.fBusy = ["Yes", instObjs.index(inst)]
                             inst.instSpecialFlag = True
 
                             instructionCycles -= 1
                             if(instructionCycles== 0):
+
                                 inst.fetch = cycle
                                 onetimeAssignFlag = True
                                 inst.status = 1
@@ -153,39 +159,56 @@ class Pipeline:
 
                     # DECODE IS BEING DONE AND NOT SOLID
                     elif inst.status == 1:
-                        if (inst.iname == "S.D" or inst.iname == "SW"):
-                            processor.fBusy = "No"
+
+                        if inst.iname in ["S.D", "SW"]:
+                            if inst.op1 not in fpRegistersList:
+                                processor.dBusy = "Yes"
+                                if processor.fBusy[1] != instObjs.index(inst):
+                                    pass
+                                else:
+                                    processor.fBusy = ["No", None]
+                                inst.decode = cycle
+                                inst.status = 2
+                            else:
+                                if inst.raw == "N":
+                                    processor.fBusy = ["No", None]
+                                inst.raw = "Y"
+                                processor.dBusy = "Yes"
+                                continue
                         # Checking if the HLT is not the last two halts
-                        if inst.iname == "HLT" and instObjs[instObjs.index(inst)-1].iname != "HLT" and youcanLoop == True:
-                            processor.fBusy = "No"
+                        if inst.iname == "HLT" and instObjs[instObjs.index(inst) - 1].iname != "HLT" and youcanLoop == True:
+                            processor.fBusy = ["No", None]
+                            inst.fetch = cycle-1
                             inst.status = 5
                             continue
-                        # Checks if the HLT is the last HLT, Then updates the last HLT and Previous HLT
 
                         elif inst.iname == "HLT" and instObjs[instObjs.index(inst)-1].iname != "HLT" and youcanLoop == False:
-                            processor.fBusy = "No"
+
+                            processor.fBusy = ["No", None]
                             inst.decode = cycle
                             inst.status = 5
 
                         elif inst.iname == "HLT" and instObjs[instObjs.index(inst)-1].iname == "HLT":
-                            processor.fBusy = "No"
+                            processor.fBusy = ["No", None]
                             inst.status = 5
                             # x = False
 
                         # Adds the OP1 to the Global list if the INSTRUCTION NAME is NOT ["BNE", "HLT", "J", "BEQ"]
-                        if inst.op1 not in fpRegistersList and inst.iname not in ["BNE", "HLT", "J", "BEQ"]:
+                        if inst.op1 not in fpRegistersList and inst.iname not in ["BNE", "HLT", "J", "BEQ", "S.D"]:
                             fpRegistersList.append(inst.op1)
                             fpInstructionList.append(instObjs.index(inst))
 
                         # Checks THE WAW Hazard
-                        if inst.op1 in fpRegistersList and fpInstructionList[fpRegistersList.index(inst.op1)] != instObjs.index(inst) and inst.iname not in ["BNE", "HLT", "J", "BEQ"]:
+                        if inst.iname not in ["BNE", "HLT", "J", "BEQ", "S.D"] and inst.op1 in fpRegistersList and fpInstructionList[fpRegistersList.index(inst.op1)] != instObjs.index(inst):
+                            print("JJJ", inst.iname, inst.op1)
                             inst.waw = "Y"
+                            print(inst.iname)
                             continue
 
                         # Actually diving in to the decode stage for all the other Instructions
                         if processor.dBusy == "No" and inst.iname not in ["BNE", "HLT", "J", "BEQ"]:
                             # Checking if the registers op2 and op3 are not already in the List.
-                            if inst.op2 not in fpRegistersList and inst.op3 not in fpRegistersList:
+                            if inst.op2 not in fpRegistersList and inst.op3 not in fpRegistersList and inst.iname not in ["S.D", "SW"]:
                                 #processor.fBusy = "No"
                                 if inst.iname in ["ADD.D", "SUB.D"]:
 
@@ -196,7 +219,7 @@ class Pipeline:
                                         if processor.addBusy == "No":
                                             inst.decode = cycle
                                             processor.dBusy = "Yes"
-                                            processor.fBusy = "No"
+                                            processor.fBusy = ["No", None]
                                             inst.status = 2
                                         else:
                                             inst.struct = "Y"
@@ -204,7 +227,7 @@ class Pipeline:
                                     else:  # NOT PIPELINED
                                         inst.decode = cycle
                                         processor.dBusy = "Yes"
-                                        processor.fBusy = "No"
+                                        processor.fBusy = ["No", None]
                                         inst.status = 2
 
                                 elif inst.iname == "MUL.D":
@@ -215,7 +238,7 @@ class Pipeline:
                                         if processor.mulBusy == "No":
                                             inst.decode = cycle
                                             processor.dBusy = "Yes"
-                                            processor.fBusy = "No"
+                                            processor.fBusy = ["No", None]
                                             inst.status = 2
                                         else:
                                             inst.struct = "Y"
@@ -223,7 +246,7 @@ class Pipeline:
                                     else:  # NOT PIPELINED
                                         inst.decode = cycle
                                         processor.dBusy = "Yes"
-                                        processor.fBusy = "No"
+                                        processor.fBusy = ["No", None]
                                         inst.status = 2
 
 
@@ -236,7 +259,7 @@ class Pipeline:
                                         if processor.divBusy == "No":
                                             inst.decode = cycle
                                             processor.dBusy = "Yes"
-                                            processor.fBusy = "No"
+                                            processor.fBusy = ["No", None]
                                             inst.status = 2
                                         else:
                                             inst.struct = "Y"
@@ -244,38 +267,47 @@ class Pipeline:
                                     else:  # NOT PIPELINED
                                         inst.decode = cycle
                                         processor.dBusy = "Yes"
-                                        processor.fBusy = "No"
+                                        processor.fBusy = ["No", None]
                                         inst.status = 2
 
 
                                 else:
+                                    if instObjs[instObjs.index(inst)-1].decode - inst.fetch > 0:
+                                        inst.fetch = instObjs[instObjs.index(inst)-1].decode
+
                                     inst.decode = cycle
                                     processor.dBusy = "Yes"
-                                    processor.fBusy = "No"
+                                    processor.fBusy = ["No", None]
                                     inst.status = 2
-                                    if(inst.iname == "S.D" or inst.iname == "SW"):
-                                        inst.waw = "N"
 
                             # DO IT FOR OP3 AS WELL - Done
                             elif (inst.op2 in fpRegistersList and fpInstructionList[fpRegistersList.index(inst.op2)] == instObjs.index(inst))\
                                 or (inst.op3 in fpRegistersList and fpInstructionList[fpRegistersList.index(inst.op3)] == instObjs.index(inst)):
+                                if instObjs[instObjs.index(inst) - 1].decode - inst.fetch > 0:
+                                    inst.fetch = instObjs[instObjs.index(inst) - 1].decode
                                 processor.dBusy = "Yes"
-                                processor.fBusy = "No"
+                                processor.fBusy = ["No", None]
                                 inst.decode = cycle
                                 inst.status = 2
+                            # else:
+                            #     inst.raw = "Y"
                             else:
                                 inst.raw = "Y"
+                                #processor.dBusy = "Yes"
+
+
 
                         # Branching case if Instruction name is BNE Or BEQ
                         elif inst.iname in ["BNE", "BEQ"]:
                             if inst.op1 in fpRegistersList and not fpInstructionList[fpRegistersList.index(inst.op1)] == instObjs.index(inst):
+                                #processor.dBusy = "Yes"
                                 inst.raw = "Y"
                             else:
-                                processor.dBusy = "Yes"
-                                processor.fBusy = "No"
+                                #processor.dBusy = "Yes"
+                                processor.fBusy = ["No", None]
                                 inst.decode = cycle
                                 inst.status = 2
-                                youcanLoop = False
+                                #youcanLoop = False
 
                                 # Branch check for BNE    ---> Yet to write Jump
                                 if inst.iname == "BNE":
@@ -283,6 +315,7 @@ class Pipeline:
                                         youcanLoop = True
                                     else:
                                         youcanLoop = False
+
 
                                 # Branch check for BEQ
                                 elif inst.iname == "BEQ":
@@ -304,7 +337,7 @@ class Pipeline:
                         # Branching case if Instruction name is J
                         elif inst.iname in ["J"]:
                             processor.dBusy = "Yes"
-                            processor.fBusy = "No"
+                            processor.fBusy = ["No", None]
                             inst.decode = cycle
                             inst.status = 2
 
@@ -315,7 +348,7 @@ class Pipeline:
                                     z = p[1]
                             newInstructions = newInstObjs[z:]
                             newLoop = True
-                            processor.dBusy = "No"
+                            #processor.dBusy = "No"
                             inst.status = 5
                             break
 
@@ -697,11 +730,11 @@ class Pipeline:
 
 
                         elif inst.iname in ["DADD", "DADDI", "DSUB", "DSUBI", "AND", "ANDI", "OR", "ORI"]:
-                            processor.dBusy = "No"
+                            #processor.dBusy = "No"
                             if processor.intBusy == "No" and inst.intCount == 1:
                                 processor.intBusy = "Yes"
                                 inst.intCount -= 1
-                                #processor.dBusy = "No"
+                                processor.dBusy = "No"
 
                             elif processor.memBusy[0] == "No":
                                 if inst.memCount == 1:
@@ -742,9 +775,10 @@ class Pipeline:
                                 self.calculate(inst.iname, inst.op1, inst.op2, inst.op3)
                             inst.status = 4
                             inst.write = cycle
-                            index1 = fpRegistersList.index(inst.op1)
-                            fpRegistersList.remove(fpRegistersList[index1])
-                            fpInstructionList.remove(fpInstructionList[index1])
+                            if inst.iname not in ["S.D", "SW"]:
+                                index1 = fpRegistersList.index(inst.op1)
+                                fpRegistersList.remove(fpRegistersList[index1])
+                                fpInstructionList.remove(fpInstructionList[index1])
                             processor.wbBusy = ["Yes", cycle]
 
                         else:
@@ -774,15 +808,16 @@ class Pipeline:
                         inst.status = 5
 
             if newLoop:
-                processor.fBusy = "No"
+                #youcanLoop = False
+                processor.fBusy = ["No", None]
                 processor.dBusy = "No"
                 processor.wbBusy = ["No", 0]
                 instObjs.pop()
                 instObjs += newInstructions
                 newLoop = False
                 #cycle -= 1
-            else:
-                processor.dBusy = "No"
+            # else:
+            #     processor.dBusy = "No"
             x -= 1
         for inst in instObjs:
             inst.finalOutput.append(inst.finalLoop)
@@ -807,6 +842,7 @@ class Pipeline:
         # REPLACING ALL THE ZERO's with " " in the output file
         for inst in instObjs:
             inst.finalOutput = [" " if x == 0 else x for x in inst.finalOutput]
+        instObjs[-1].finalOutput = [" " if x == "N" else x for x in instObjs[-1].finalOutput]
         table = []
         headers = ["", "Instruction", "    ", "FT", "    ", "ID", "    ", "EX", "    ", "WB", "    ", "RAW", "    ", "WAR", "    ", "WAW", "    ", "Struct"]
         table.append(headers)
@@ -853,7 +889,7 @@ class Pipeline:
 
 class Processor:
     def __init__(self):
-        self.fBusy = "No"
+        self.fBusy = ["No", None]
         self.dBusy = "No"
         self.wbBusy = ["No", 0]
         self.intBusy = "No"
