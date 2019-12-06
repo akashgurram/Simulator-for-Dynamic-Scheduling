@@ -466,6 +466,7 @@ class Pipeline:
                                             continue
                                         else:
                                             inst.dmiss = True
+                                            inst.dataCacheMiss = True
                                             daccessReq += 1
                                             cacheBusBusy = [True, instObjs.index(inst)]
                                         inst.memCount += datacacheMissPen
@@ -580,6 +581,7 @@ class Pipeline:
                                             continue
                                         else:
                                             inst.dmiss = True
+                                            inst.dataCacheMiss = True
                                             daccessReq += 1
                                             cacheBusBusy = [True, instObjs.index(inst)]
                                         # The EXTRA ONE CYCLE because store takes it to write
@@ -961,6 +963,28 @@ class Pipeline:
 
                         if processor.wbBusy[0] == "No":
                             if inst.iname in ["L.D", "S.D", "LW", "SW"]:
+                                #Caculating the changes to the Integer registers for LW and SW
+                                if inst.iname == "LW":
+
+                                    offset1 = inst.op2.split("(")[0]
+                                    actualReg1 = inst.op2.split("(")[1][:-1]
+                                    haiKya = int(offset1)+regs[int(actualReg1[1:])]
+                                    if haiKya in dataLoc.keys():
+                                        regs[int(inst.op1[1:])] = dataLoc[haiKya]
+                                    else:
+                                        print(inst.op2 + " Is not present in data.txt")
+                                elif inst.iname == "SW":
+
+                                    offset1 = inst.op2.split("(")[0]
+                                    actualReg1 = inst.op2.split("(")[1][:-1]
+                                    haiKya = int(offset1) + regs[int(actualReg1[1:])]
+
+                                    if haiKya in dataLoc.keys():
+                                        dataLoc[haiKya] = regs[int(inst.op1[1:])]
+                                    else:
+                                        print(inst.op2 + " Is not present in data.txt")
+
+
                                 if RAND2 == True:
 
                                     processor.memBusy[0] = "No"
@@ -1069,10 +1093,11 @@ class Pipeline:
         for inst in instObjs:
             table.append(inst.finalOutput)
         print(tabulate(table))
-        print("I Cache hit", icacheHit)
-        print("I Access req", iaccessReq)
-        print("D Cache hit", dcacheHit)
-        print("D Access req", daccessReq)
+        print("Total number of access requests for instruction cache:", iaccessReq)
+        print("Number of instruction cache hits: ", icacheHit)
+        print("Total number of access requests for data cache: ", daccessReq)
+        print("Number of data cache hits: ", dcacheHit)
+        print("\n\nPLEASE FIND THE RESULT IN THE GENERATED result.txt")
         f = open('result.txt', 'w')
         f.write(tabulate(table, tablefmt="plain"))
         f.write("\n\nTotal number of access requests for instruction cache: " + repr(iaccessReq))
