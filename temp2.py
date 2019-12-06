@@ -14,6 +14,7 @@ import copy
 
 class Instructions:
     def __init__(self, inst):
+        self.structset = 0
         self.finalLoop = "    "
         self.finalName = " ".join(inst)
         self.instCacheMiss = False
@@ -40,6 +41,12 @@ class Instructions:
         self.functionalUnit = None
         self.execCycle = 0
         self.finalOutput = []
+
+        self.ihit = False
+        self.dhit = False
+        self.imiss = False
+        self.dmiss = False
+
 
         if len(inst) == 3:
             self.op1 = inst[1]
@@ -98,7 +105,7 @@ class Pipeline:
         cycle = 0
         newLoop = False
         youcanLoop = False
-        cacheBusBusy = False
+        cacheBusBusy = [False, None]
         instructionCache = {0: [], 1: [], 2: [], 3: []}
         dataCache1 = {0: [], 1: []}
         LRU1 = 0
@@ -121,23 +128,24 @@ class Pipeline:
 
 
                     if inst.status == 0:
-                        #
-                        # if inst.iname == "HLT" and instObjs[instObjs.index(inst) - 1].iname != "HLT" and youcanLoop == True:
-                        #     processor.fBusy = ["No", None]
-                        #     inst.fetch = cycle
-                        #     inst.status = 5
-                        #     continue
-                        if processor.fBusy[0] == "No" or inst.instSpecialFlag == True :
+                        if processor.fBusy[0] == "No" or inst.instSpecialFlag == True:
                             blockNo = int(inst.wordAddress / 4) % 4
 
 
                             if onetimeAssignFlag == True:
                                 if inst.wordAddress in instructionCache[blockNo]:
                                     icacheHit += 1
+                                    inst.ihit = True
                                     iaccessReq += 1
                                 else:
-                                    instructionCache[blockNo] = list(range(inst.wordAddress, inst.wordAddress + 4))
+                                    startingAdress = int(inst.wordAddress/4) * 4
+                                    instructionCache[blockNo] = list(range(startingAdress, startingAdress + 4))
                                     inst.instCacheMiss = True
+                                    if cacheBusBusy[0] == True:
+                                        continue
+                                    else:
+                                        inst.imiss = True
+                                        cacheBusBusy = [True, instObjs.index(inst)]
                                     iaccessReq += 1
                                 if inst.instCacheMiss:
                                     instructionCycles = instcacheMissPen
@@ -146,16 +154,35 @@ class Pipeline:
                                     instructionCycles = functional_units["I-Cache"]
                                     onetimeAssignFlag = False
 
+                            if inst.imiss == True and cacheBusBusy[0] == True and cacheBusBusy[1] != instObjs.index(inst):
+                                inst.struct = "YY"
+                                continue
 
-                            processor.fBusy = ["Yes", instObjs.index(inst)]
-                            inst.instSpecialFlag = True
+                            elif inst.imiss == True and not cacheBusBusy[0] == True or cacheBusBusy[1] == instObjs.index(inst):
+                                processor.fBusy = ["Yes", instObjs.index(inst)]
+                                inst.instSpecialFlag = True
 
-                            instructionCycles -= 1
-                            if(instructionCycles== 0):
+                                instructionCycles -= 1
+                                if(instructionCycles== 0):
 
-                                inst.fetch = cycle
-                                onetimeAssignFlag = True
-                                inst.status = 1
+                                    inst.fetch = cycle
+                                    cacheBusBusy = [False, None]
+                                    onetimeAssignFlag = True
+                                    inst.status = 1
+                            elif inst.ihit == True:
+                                processor.fBusy = ["Yes", instObjs.index(inst)]
+                                inst.instSpecialFlag = True
+
+                                instructionCycles -= 1
+                                if(instructionCycles== 0):
+                                    inst.fetch = cycle
+                                    onetimeAssignFlag = True
+                                    inst.status = 1
+
+                            else:
+                                inst.struct = "YY"
+
+
 
 
 
@@ -270,6 +297,18 @@ class Pipeline:
                                         processor.fBusy = ["No", None]
                                         inst.status = 2
 
+                                elif inst.iname in ["L.D", "LW"]:
+                                    if RAND1 == True or processor.intBusy == "No":
+                                        if instObjs[instObjs.index(inst)-1].decode - inst.fetch > 0:
+                                            inst.fetch = instObjs[instObjs.index(inst)-1].decode
+
+                                        inst.decode = cycle
+                                        processor.dBusy = "Yes"
+                                        processor.fBusy = ["No", None]
+                                        print("FREE", inst.iname, inst.op1, cycle)
+                                        inst.status = 2
+                                    else:
+                                        continue
 
                                 else:
                                     if instObjs[instObjs.index(inst)-1].decode - inst.fetch > 0:
@@ -361,66 +400,63 @@ class Pipeline:
 
                     # EXECUTION IS BEING DONE HERE. SOLID
                     elif inst.status == 2:
+
                         if inst.iname in ["L.D"]:
+
                             if inst.dataCacheMiss == False:
                                 offset = inst.op2.split("(")[0]
                                 actualReg = inst.op2.split("(")[1][:-1]
-                                actualBlockNo = regs[int(actualReg[1:])] + int(offset)
-                                # initialBlockNo = int((regs[int(actualReg[1:])] + int(offset))/16) * 16
-                                # setNumber = int(regs[int(actualReg[1:])] + int(offset)/16) % 2
-                                initialBlockNo = int(actualBlockNo / 16) * 16
-                                setNumber = int(actualBlockNo/ 16) % 2
-                                daccessReq+=1
-                                listtoBePopulated = [initialBlockNo, initialBlockNo+4, initialBlockNo+8, initialBlockNo+12]
-                                dataCacheSet = []
-                                if setNumber == 0:
-                                    dataCacheSet, LRU = dataCache1, LRU1
-                                elif setNumber == 1:
-                                    dataCacheSet, LRU = dataCache2, LRU2
-                                # Search in only 1 set
+                                actualBlockNo1 = regs[int(actualReg[1:])] + int(offset)
+                                actualBlockNos = [actualBlockNo1, actualBlockNo1+4]
 
-                                if actualBlockNo in dataCacheSet[0] or actualBlockNo in dataCacheSet[1]:
+                                for actualBlockNo in actualBlockNos:
+                                    initialBlockNo = int(actualBlockNo / 16) * 16
+                                    setNumber = int(actualBlockNo/ 16) % 2
 
-                                    dcacheHit+=1
-                                    inst.memCount += functional_units["D-Cache"]
-                                    inst.dataCacheMiss = True
-                                else:
+                                    listtoBePopulated = [initialBlockNo, initialBlockNo+4, initialBlockNo+8, initialBlockNo+12]
+                                    dataCacheSet = []
+                                    if setNumber == 0:
+                                        dataCacheSet, LRU = dataCache1, LRU1
+                                    elif setNumber == 1:
+                                        dataCacheSet, LRU = dataCache2, LRU2
+                                    # Search in only 1 set
 
-                                    inst.memCount += datacacheMissPen
+                                    if actualBlockNo in dataCacheSet[0] or actualBlockNo in dataCacheSet[1]:
+
+                                        dcacheHit+=1
+                                        daccessReq += 1
+                                        inst.dhit = True
+                                        inst.memCount += functional_units["D-Cache"]
+                                        inst.dataCacheMiss = True
+                                    else:
+                                        if cacheBusBusy[0] == True:
+                                            print("LLLDDDD", inst.iname, inst.op1, cycle)
+                                            continue
+                                        else:
+                                            inst.dmiss = True
+                                            daccessReq += 1
+                                            cacheBusBusy = [True, instObjs.index(inst)]
+                                        inst.memCount += datacacheMissPen
 
 
-                                    dataCacheSet[LRU] = listtoBePopulated
-                                    LRU = LRU ^ 1
+                                        dataCacheSet[LRU] = listtoBePopulated
+                                        LRU = LRU ^ 1
 
-                                actualBlockNo += 4
-                                initialBlockNo = int(actualBlockNo / 16) * 16
-                                setNumber = int(actualBlockNo/ 16) % 2
-                                daccessReq += 1
-                                listtoBePopulated = [initialBlockNo, initialBlockNo + 4, initialBlockNo + 8,
-                                                     initialBlockNo + 12]
-                                dataCacheSet = []
-                                if setNumber == 0:
-                                    dataCacheSet, LRU = dataCache1, LRU1
-                                elif setNumber == 1:
-                                    dataCacheSet, LRU = dataCache2, LRU2
-                                if actualBlockNo in dataCacheSet[0] or actualBlockNo in dataCacheSet[1]:
 
-                                    dcacheHit += 1
-                                    inst.memCount += functional_units["D-Cache"]
-                                    inst.dataCacheMiss = True
-                                else:
 
-                                    inst.memCount += datacacheMissPen
-                                    dataCacheSet[LRU] = listtoBePopulated
-                                    LRU = LRU ^ 1
 
 
                             if processor.intBusy == "No" and inst.intCount == 1:
+                                print("IUCYCLE", inst.iname, inst.op1, cycle)
+
+                                #WRITE THE SETTING
+
                                 if RAND2 == True or processor.memBusy[0] == "No":
 
 
                                     processor.intBusy = "Yes"
                                     inst.intCount -= 1
+
                                     processor.dBusy = "No"
                                     RAND1 = True
                                 else:
@@ -429,22 +465,49 @@ class Pipeline:
 
                             else:
 
+                                if inst.dmiss and cacheBusBusy[0] and cacheBusBusy[1]!= instObjs.index(inst):
+                                    inst.struct = "YY"
+                                    continue
 
-                                if processor.memBusy[0] == "No" or processor.memBusy[1] == instObjs.index(inst):
-                                    if processor.memBusy[0] == "No":
-                                        processor.intBusy = "No"
-                                        RAND1 = False
-                                    processor.memBusy[0] = "Yes"
-                                    processor.memBusy[1] = instObjs.index(inst)
-                                    inst.memCount -= 1
+                                elif (inst.dmiss and not cacheBusBusy[0]) or cacheBusBusy[1] == instObjs.index(inst):
 
-                                    if(inst.memCount == 0):
-                                        RAND2 = True
-                                        inst.exec = cycle
-                                        inst.status = 3
+                                    if processor.memBusy[0] == "No" or processor.memBusy[1] == instObjs.index(inst):
+                                        if processor.memBusy[0] == "No":
+                                            processor.intBusy = "No"
+                                            RAND1 = False
+                                        processor.memBusy[0] = "Yes"
+                                        processor.memBusy[1] = instObjs.index(inst)
+                                        print("Eh", inst.iname, inst.op1, cycle, inst.memCount)
+                                        inst.memCount -= 1
+
+                                        if (inst.memCount == 0):
+                                            cacheBusBusy = [False, None]
+                                            RAND2 = True
+                                            inst.exec = cycle
+                                            inst.status = 3
+
+                                    else:
+                                        inst.struct = "Y"
+
+                                elif inst.dhit:
+                                    if processor.memBusy[0] == "No" or processor.memBusy[1] == instObjs.index(inst):
+                                        if processor.memBusy[0] == "No":
+                                            processor.intBusy = "No"
+                                            RAND1 = False
+                                        processor.memBusy[0] = "Yes"
+                                        processor.memBusy[1] = instObjs.index(inst)
+                                        inst.memCount -= 1
+
+                                        if(inst.memCount == 0):
+                                            RAND2 = True
+                                            inst.exec = cycle
+                                            inst.status = 3
+
+                                    else:
+                                     inst.struct = "Y"
 
                                 else:
-                                 inst.struct = "Y"
+                                    inst.struct = "R2D2"
 
                         if inst.iname in ["S.D"]:
                             if inst.dataCacheMiss == False:
@@ -753,6 +816,10 @@ class Pipeline:
                             #processor.dBusy = "No"
 
                             if processor.intBusy == "No" and inst.intCount == 1:
+                                if processor.memBusy[1] == instObjs.index(inst)-1:
+                                    inst.structset +=1
+                                if instObjs[instObjs.index(inst)-1].structset > 1:
+                                    inst.struct = "STRUCT SET"
                                 if RAND2 == True or processor.memBusy[0] == "No":
 
                                     processor.intBusy = "Yes"
