@@ -69,6 +69,9 @@ def instParsing(insts):
                 instructions.append([x[0], x[1][0:-1], x[2]])
             elif len(x) == 4:
                 instructions.append([x[0], x[1][0:-1], x[2][0:-1], x[3]])
+            # If the instruction is Jump
+            elif len(x) == 2:
+                instructions.append([x[0], x[1]])
             else:
                 instructions.append([x[0]])
 
