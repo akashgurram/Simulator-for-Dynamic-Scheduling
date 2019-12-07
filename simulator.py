@@ -4,6 +4,7 @@ Created on Mon Nov 18 18:48:44 2019
 
 @author: akash
 """
+import sys
 
 from utils import readFiles, instParsing, functionalUnits
 import tabulate as tb
@@ -1146,9 +1147,9 @@ class Processor:
 
 
 if __name__ == "__main__":
-    regs = readFiles("reg.txt")
-    dataLoc = readFiles("data.txt")
-    functional_units = readFiles("config.txt")
-    loop, instructions = readFiles("inst.txt")
+    regs = readFiles(sys.argv[3])
+    dataLoc = readFiles(sys.argv[2])
+    functional_units = readFiles(sys.argv[4])
+    loop, instructions = readFiles(sys.argv[1])
 
     Pipeline(instructions)
